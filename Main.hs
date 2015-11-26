@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ViewPatterns #-}
+import Control.Exception
 import Control.Monad.Error.Class
 import Control.Monad.Loops
 import Control.Monad.State
@@ -110,13 +111,27 @@ liftToBase f = ModuleT $ do
     Left err -> MonadLib.raise err
     Right (val, env') -> val <$ MonadLib.set env'
 
-inputBits :: Expr PName -> ModuleM Integer
-inputBits expr = do
-  (_, _, schema) <- liftToBase $ checkExpr expr
+checkExprBase :: Expr PName -> ModuleM (TC.Expr, TC.Schema)
+checkExprBase parsed = (\(_, e, s) -> (e, s)) <$> liftToBase (checkExpr parsed)
+
+data SimpleType = SimpleType
+  { inputBits  :: Integer
+  , outputType :: TValue
+  }
+
+fromSimpleType :: SimpleType -> TC.Schema
+fromSimpleType (SimpleType n out) = TC.Forall
+  { TC.sVars  = []
+  , TC.sProps = []
+  , TC.sType  = TC.tFun (TC.tSeq (TC.tNum n) TC.tBit) (tValTy out)
+  }
+
+toSimpleType :: TC.Schema -> ModuleM SimpleType
+toSimpleType schema = do
   env <- getEvalEnv
   case schema of
     TC.Forall [] _ ty -> case TC.evalType env ty of
-      (isTFun -> Just (isTSeq -> Just (numTValue -> Nat n, isTBit -> True), _)) -> return n
+      (isTFun -> Just (isTSeq -> Just (numTValue -> Nat n, isTBit -> True), out)) -> return (SimpleType n out)
       _ -> fail ("unsupported type " ++ pretty ty)
     _ -> fail "polymorphic types are unsupported"
 
@@ -124,9 +139,9 @@ step :: Integer -> [Bool] -> Maybe (Bool -> [Bool])
 step n xs | genericLength xs < n = Just (\x -> xs ++ [x])
           | otherwise            = Nothing
 
-checkEquality :: Expr PName -> [Bool] -> [Bool] -> ModuleM Bool
-checkEquality f l r = do
-  (_, expr, schema) <- liftToBase $ checkExpr (equalityCondition f l r)
+checkEquality :: ExprBuilderParams -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> ModuleM Bool
+checkEquality params unapplied l r = do
+  let (expr, simpleTy) = equalityCondition params unapplied l r
   res <- liftToBase $ satProve ProverCommand
     { pcQueryType  = SatQuery (SomeSat 1)
     , pcProverName = "cvc4"
@@ -134,24 +149,60 @@ checkEquality f l r = do
     , pcExtraDecls = []
     , pcSmtFile    = Nothing
     , pcExpr       = expr
-    , pcSchema     = schema
+    , pcSchema     = fromSimpleType simpleTy
     }
   case res of
     ThmResult    _ -> return True
     AllSatResult _ -> return False
     _              -> fail "SAT solver did something weird"
 
--- TODO: this captures y in a bad way... right?
-equalityCondition :: Expr PName -> [Bool] -> [Bool] -> Expr PName
-equalityCondition f l r = EFun [pat "y"]
-  (ident "!=" $$ partialApp l $$ partialApp r)
+-- (!) assumes `length l == length r`
+-- (!) assumes `length l <= n`
+equalityCondition :: ExprBuilderParams -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> (TC.Expr, SimpleType)
+equalityCondition params (unapplied, SimpleType nin out) l r
+  = assert (nl == nr && nl <= nin)
+  $ (abstraction, SimpleType nfresh tvBit)
   where
-  infixl 1 $$
-  pat   = PVar . Located emptyRange . UnQual . packIdent
-  ident = EVar . UnQual . packIdent
-  ($$)  = EApp
-  lift  = EList . map (ident . show)
-  partialApp bs = f $$ (ident "#" $$ lift bs $$ ident "y")
+  nl, nr, nfresh :: Integer
+  nl = genericLength l
+  nr = genericLength r
+  nfresh = nin - nl
+
+  infixl 1 $$, $^
+  ($$) = TC.EApp
+  ($^) = TC.ETApp
+  tvBit          = TValue TC.tBit -- TODO: push this upstream
+  liftBool True  = cryptolTrue params
+  liftBool False = cryptolFalse params
+  lift        bs = TC.EList (map liftBool bs) TC.tBit
+  partialApp  bs = unapplied $$ (  cryptolCat params
+                                $^ TC.tNum nl
+                                $^ TC.tNum nfresh
+                                $^ TC.tBit
+                                $$ lift bs
+                                $$ TC.EVar (freshVar params)
+                                )
+  abstraction    = TC.EAbs (freshVar params) (TC.tSeq (TC.tNum nfresh) TC.tBit)
+                 $ cryptolNeq params $^ tValTy out $$ partialApp l $$ partialApp r
+
+data ExprBuilderParams = ExprBuilderParams
+  { freshVar     :: TC.Name
+  , cryptolTrue  :: TC.Expr
+  , cryptolFalse :: TC.Expr
+  , cryptolCat   :: TC.Expr
+  , cryptolNeq   :: TC.Expr
+  }
+
+getExprBuilderParams :: ModuleM ExprBuilderParams
+getExprBuilderParams = do
+    -- TODO: this is a terrible hack; all we really want is a fresh name and
+    -- there has to be a better way to get one
+    (TC.EAbs x _ _, _) <- checkExprBase cryptolId
+    (true         , _) <- checkExprBase $ EVar (ident "True" )
+    (false        , _) <- checkExprBase $ EVar (ident "False")
+    (cat          , _) <- checkExprBase $ EVar (ident "#"    )
+    (neq          , _) <- checkExprBase $ EVar (ident "!="   )
+    return (ExprBuilderParams x true false cat neq)
 
 showBool False = "0"
 showBool True  = "1"
@@ -234,7 +285,12 @@ options = info (helper <*> options_)
   <> progDesc "Produce a finite state machine that emulates EXPR, inspecting one input bit at a time, using SOLVER to check equality of states. The type of EXPR should be monomorphic, and unify with `{a} (Cmp a) => [n] -> a`."
   )
 
--- TODO: just rename/check the type of the incoming expression once
+ident :: String -> PName
+ident = UnQual . packIdent
+
+cryptolId :: Expr PName
+cryptolId = EFun [PVar (Located emptyRange (ident "x"))] (ETyped (EVar (ident "x")) TBit)
+
 main = do
   opts <- execParser options
   let howToPrint = case optOutputPath opts of
@@ -243,8 +299,10 @@ main = do
   env <- initialModuleEnv
   res <- runModuleM env $ do
     mapM_ (liftToBase . loadModuleByPath) (optModules opts)
-    len  <- inputBits (optExpr opts)
-    ldag <- evalStateT (unfoldLDAGM ((lift .) . checkEquality (optExpr opts)) (step len) []) 0
+    (expr, schema) <- checkExprBase $ optExpr opts
+    simpleTy <- toSimpleType schema
+    params   <- getExprBuilderParams
+    ldag     <- evalStateT (unfoldLDAGM ((lift .) . checkEquality params (expr, simpleTy)) (step (inputBits simpleTy)) []) 0
     io . howToPrint . printDotGraph . graphToDot showParams . toFGL $ ldag
   exitCode <- case res of
     (Left err, _ ) -> ExitFailure 1 <$ hPutStrLn stderr (pretty err)
