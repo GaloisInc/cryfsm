@@ -9,13 +9,14 @@ import Control.Monad.State
 import Cryptol.Eval.Value
 import Cryptol.ModuleSystem
 import Cryptol.ModuleSystem.Monad
+import Cryptol.Parser
 import Cryptol.Parser.AST
 import Cryptol.Parser.Name
 import Cryptol.Parser.Position
 import Cryptol.Symbolic
 import Cryptol.TypeCheck.Solver.InfNat
 import Cryptol.Utils.Ident
-import Cryptol.Utils.PP
+import Cryptol.Utils.PP (pretty)
 import Data.Default
 import Data.IntMap (IntMap)
 import Data.Graph.Inductive.Graph (Graph, mkGraph)
@@ -30,8 +31,10 @@ import Data.Universe.Instances.Ord
 import Data.Universe.Instances.Read
 import Data.Universe.Instances.Show
 import Data.Universe.Instances.Traversable
+import Options.Applicative
 import System.Environment
 import System.Exit
+import System.IO
 
 import qualified Cryptol.TypeCheck.AST as TC
 import qualified Cryptol.Eval.Type     as TC
@@ -114,9 +117,9 @@ instance Monad m => MonadError ModuleError (ModuleT m) where
 instance MonadIO m => MonadIO (ModuleT m) where
   liftIO act = MonadLib.lift (liftIO act)
 
-inputBits :: ModuleM Integer
-inputBits = do
-  (_, _, schema) <- liftToBase . checkExpr . EVar . UnQual . packIdent $ "main"
+inputBits :: Expr PName -> ModuleM Integer
+inputBits expr = do
+  (_, _, schema) <- liftToBase $ checkExpr expr
   env <- getEvalEnv
   case schema of
     TC.Forall [] _ ty -> case TC.evalType env ty of
@@ -128,9 +131,9 @@ step :: Integer -> [Bool] -> Maybe (Bool -> [Bool])
 step n xs | genericLength xs < n = Just (\x -> xs ++ [x])
           | otherwise            = Nothing
 
-checkEquality :: [Bool] -> [Bool] -> ModuleM Bool
-checkEquality l r = do
-  (_, expr, schema) <- liftToBase $ checkExpr (equalityCondition l r)
+checkEquality :: Expr PName -> [Bool] -> [Bool] -> ModuleM Bool
+checkEquality f l r = do
+  (_, expr, schema) <- liftToBase $ checkExpr (equalityCondition f l r)
   res <- liftToBase $ satProve ProverCommand
     { pcQueryType  = SatQuery (SomeSat 1)
     , pcProverName = "cvc4"
@@ -145,16 +148,17 @@ checkEquality l r = do
     AllSatResult _ -> return False
     _              -> fail "SAT solver did something weird"
 
-equalityCondition :: [Bool] -> [Bool] -> Expr PName
-equalityCondition l r = EFun [pat "y"]
-  (ident "!=" $$ partialMain l $$ partialMain r)
+-- TODO: this captures y in a bad way... right?
+equalityCondition :: Expr PName -> [Bool] -> [Bool] -> Expr PName
+equalityCondition f l r = EFun [pat "y"]
+  (ident "!=" $$ partialApp l $$ partialApp r)
   where
   infixl 1 $$
   pat   = PVar . Located emptyRange . UnQual . packIdent
   ident = EVar . UnQual . packIdent
   ($$)  = EApp
   lift  = EList . map (ident . show)
-  partialMain bs = ident "main" $$ (ident "#" $$ lift bs $$ ident "y")
+  partialApp bs = f $$ (ident "#" $$ lift bs $$ ident "y")
 
 showBool False = "0"
 showBool True  = "1"
@@ -166,14 +170,90 @@ showParams = nonClusteredParams
   , fmtEdge = \(_, _, el)   -> [toLabel . showBool  $ el]
   }
 
+data OutputFormat = DOT deriving (Bounded, Enum, Eq, Ord, Read, Show)
+
+data Options = Options
+  { optOutputPath   :: Maybe FilePath
+  , optExpr         :: Expr PName
+  , optOutputFormat :: OutputFormat
+  , optSolver       :: String
+  , optModules      :: [FilePath]
+  } deriving (Eq, Show)
+
+knownSolvers :: [String]
+knownSolvers = map fst proverConfigs
+
+knownSolversString = intercalate ", " knownSolvers
+
+knownSolverParser :: ReadM String
+knownSolverParser = do
+  s <- str
+  unless (s `elem` knownSolvers) (readerError $  "unknown solver "
+                                              ++ s
+                                              ++ "; choose from "
+                                              ++ knownSolversString
+                                 )
+  return s
+
+exprParser :: ReadM (Expr PName)
+exprParser = do
+  s <- str
+  case parseExpr (fromString s) of
+    Left err -> readerError $ "couldn't parse cryptol expression\n" ++ pretty err
+    Right v  -> return v
+
+options_ :: Parser Options
+options_ = Options
+  <$> optional (strOption (  short 'o'
+                          <> metavar "FILE"
+                          <> help "output file (default stdin)"
+                          )
+               )
+  <*> (option exprParser (  short 'e'
+                         <> metavar "EXPR"
+                         <> help "a cryptol expression to partially evaluate (default main)"
+                         )
+      <|> pure (EVar . UnQual . packIdent $ "main")
+      )
+  <*> (option auto (  short 'f'
+                   <> metavar "FORMAT"
+                   <> help (  "output format: "
+                           ++ intercalate ", " (map show [minBound .. maxBound :: OutputFormat])
+                           ++ " (default DOT)"
+                           )
+                   )
+      <|> pure DOT
+      )
+  <*> (option knownSolverParser (  short 's'
+                                <> metavar "SOLVER"
+                                <> help (  "which SMT solver to use: "
+                                        ++ knownSolversString
+                                        ++ " (default cvc4)"
+                                        )
+                                )
+      <|> pure "cvc4"
+      )
+  <*> many (argument str (metavar "FILE ..."))
+
+options :: ParserInfo Options
+options = info (helper <*> options_)
+  (  fullDesc
+  <> progDesc "Produce a finite state machine that emulates EXPR, inspecting one input bit at a time, using SOLVER to check equality of states. The type of EXPR should be monomorphic, and unify with `{a} (Cmp a) => [n] -> a`."
+  )
+
+-- TODO: just rename/check the type of the incoming expression once
 main = do
-  args <- getArgs
-  let howToPrint = case args of
-        [file] -> T.writeFile file
-        _      -> T.putStrLn
+  opts <- execParser options
+  let howToPrint = case optOutputPath opts of
+        Just file -> T.writeFile file
+        _         -> T.putStrLn
   env <- initialModuleEnv
-  runModuleM env $ do
-    mod  <- liftToBase $ loadModuleByPath "main.cry"
-    len  <- inputBits
-    ldag <- evalStateT (unfoldLDAGM ((lift .) . checkEquality) (step len) []) 0
+  res <- runModuleM env $ do
+    mapM_ (liftToBase . loadModuleByPath) (optModules opts)
+    len  <- inputBits (optExpr opts)
+    ldag <- evalStateT (unfoldLDAGM ((lift .) . checkEquality (optExpr opts)) (step len) []) 0
     io . howToPrint . printDotGraph . graphToDot showParams . toFGL $ ldag
+  exitCode <- case res of
+    (Left err, _ ) -> ExitFailure 1 <$ hPutStrLn stderr (pretty err)
+    (_       , ws) -> ExitSuccess   <$ mapM_ (putStrLn . pretty) ws
+  exitWith exitCode
