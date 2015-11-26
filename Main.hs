@@ -300,6 +300,7 @@ main = do
         _         -> T.putStrLn
   env <- initialModuleEnv
   res <- runModuleM env $ do
+    -- TODO: load cryptol prelude when there are no module files specified
     mapM_ (liftToBase . loadModuleByPath) (optModules opts)
     (expr, schema) <- checkExprBase $ optExpr opts
     simpleTy <- toSimpleType schema
