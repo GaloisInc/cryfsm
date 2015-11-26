@@ -307,7 +307,6 @@ main = do
     -- TODO: these next two lines are way too dense
     ldag     <- evalStateT (unfoldLDAGM ((lift .) . checkEquality params (expr, simpleTy)) (step (inputBits simpleTy)) []) 0
     io . howToPrint . printDotGraph . graphToDot showParams . toFGL $ ldag
-  exitCode <- case res of
-    (Left err, _ ) -> ExitFailure 1 <$ hPutStrLn stderr (pretty err)
-    (_       , ws) -> ExitSuccess   <$ mapM_ (putStrLn . pretty) ws
-  exitWith exitCode
+  case res of
+    (Left err, _ ) -> hPutStrLn stderr (pretty err) >> exitWith (ExitFailure 1)
+    (_       , ws) -> mapM_ (putStrLn . pretty) ws
