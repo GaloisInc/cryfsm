@@ -126,6 +126,7 @@ fromSimpleType (SimpleType n out) = TC.Forall
   , TC.sType  = TC.tFun (TC.tSeq (TC.tNum n) TC.tBit) (tValTy out)
   }
 
+-- TODO: check that the output type is in Cmp
 toSimpleType :: TC.Schema -> ModuleM SimpleType
 toSimpleType schema = do
   env <- getEvalEnv
@@ -144,6 +145,7 @@ checkEquality params unapplied l r = do
   let (expr, simpleTy) = equalityCondition params unapplied l r
   res <- liftToBase $ satProve ProverCommand
     { pcQueryType  = SatQuery (SomeSat 1)
+    -- TODO: this should probably respect the -s command-line option
     , pcProverName = "cvc4"
     , pcVerbose    = False
     , pcExtraDecls = []
@@ -302,6 +304,7 @@ main = do
     (expr, schema) <- checkExprBase $ optExpr opts
     simpleTy <- toSimpleType schema
     params   <- getExprBuilderParams
+    -- TODO: these next two lines are way too dense
     ldag     <- evalStateT (unfoldLDAGM ((lift .) . checkEquality params (expr, simpleTy)) (step (inputBits simpleTy)) []) 0
     io . howToPrint . printDotGraph . graphToDot showParams . toFGL $ ldag
   exitCode <- case res of
