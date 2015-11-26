@@ -110,13 +110,6 @@ liftToBase f = ModuleT $ do
     Left err -> MonadLib.raise err
     Right (val, env') -> val <$ MonadLib.set env'
 
-instance Monad m => MonadError ModuleError (ModuleT m) where
-  throwError e = ModuleT (MonadLib.raise e)
-  catchError m f = ModuleT (MonadLib.try (unModuleT m) >>= either (unModuleT . f) return)
-
-instance MonadIO m => MonadIO (ModuleT m) where
-  liftIO act = MonadLib.lift (liftIO act)
-
 inputBits :: Expr PName -> ModuleM Integer
 inputBits expr = do
   (_, _, schema) <- liftToBase $ checkExpr expr
