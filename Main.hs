@@ -140,13 +140,12 @@ step :: Integer -> [Bool] -> Maybe (Bool -> [Bool])
 step n xs | genericLength xs < n = Just (\x -> xs ++ [x])
           | otherwise            = Nothing
 
-checkEquality :: ExprBuilderParams -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> ModuleM Bool
-checkEquality params unapplied l r = do
+checkEquality :: ExprBuilderParams -> String -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> ModuleM Bool
+checkEquality params solver unapplied l r = do
   let (expr, simpleTy) = equalityCondition params unapplied l r
   res <- liftToBase $ satProve ProverCommand
     { pcQueryType  = SatQuery (SomeSat 1)
-    -- TODO: this should probably respect the -s command-line option
-    , pcProverName = "cvc4"
+    , pcProverName = solver
     , pcVerbose    = False
     , pcExtraDecls = []
     , pcSmtFile    = Nothing
@@ -156,6 +155,7 @@ checkEquality params unapplied l r = do
   case res of
     ThmResult    _ -> return True
     AllSatResult _ -> return False
+    ProverError  e -> fail e
     _              -> fail "SAT solver did something weird"
 
 -- (!) assumes `length l == length r`
@@ -274,10 +274,10 @@ options_ = Options
                                 <> metavar "SOLVER"
                                 <> help (  "which SMT solver to use: "
                                         ++ knownSolversString
-                                        ++ " (default cvc4)"
+                                        ++ " (default any)"
                                         )
                                 )
-      <|> pure "cvc4"
+      <|> pure "any"
       )
   <*> many (argument str (metavar "FILE ..."))
 
@@ -306,7 +306,7 @@ main = do
     simpleTy <- toSimpleType schema
     params   <- getExprBuilderParams
     -- TODO: these next two lines are way too dense
-    ldag     <- evalStateT (unfoldLDAGM ((lift .) . checkEquality params (expr, simpleTy)) (step (inputBits simpleTy)) []) 0
+    ldag     <- evalStateT (unfoldLDAGM ((lift .) . checkEquality params (optSolver opts) (expr, simpleTy)) (step (inputBits simpleTy)) []) 0
     io . howToPrint . printDotGraph . graphToDot showParams . toFGL $ ldag
   case res of
     (Left err, _ ) -> hPutStrLn stderr (pretty err) >> exitWith (ExitFailure 1)
