@@ -21,8 +21,9 @@ main = do
     (expr, schema) <- checkExpr $ optExpr opts
     simpleTy <- toSimpleType schema
     params   <- getExprBuilderParams
-    -- TODO: the next line is way too dense
-    ldag     <- evalStateT (unfoldLDAGM ((lift .) . checkEquality params (optSolver opts) (expr, simpleTy)) (step (inputBits simpleTy)) []) 0
+    ldag     <- unfoldLDAGM (checkEquality params (optSolver opts) (expr, simpleTy))
+                            (step (inputBits simpleTy))
+                            []
     io . howToPrint . convert $ ldag
   case res of
     (Left err, _ ) -> hPutStrLn stderr (pretty err) >> exitWith (ExitFailure 1)
