@@ -1,9 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE Rank2Types #-}
 module Data.LDAG
-  ( LDAG(..)
-  , Layer(..)
-  , Node(..)
+  ( LDAG, layers, allLayers
+  , Layer, nodes, allNodes
+  , Node, nodeLabel, outgoing
   , LayerMap
   , NodeMap
   , LayerID
@@ -11,6 +14,7 @@ module Data.LDAG
   , unfoldLDAGM
   ) where
 
+import Control.Lens (At(at), Ixed(ix), Index, IndexedTraversal, IxValue, Lens', (?=), anon, itoListOf, itraversed, makeLenses, to, use)
 import Control.Monad.Loops (firstM)
 import Control.Monad.State (MonadState, StateT, execStateT, get, gets, lift, modify, put)
 import Control.Monad.Supply (evalSupplyT, supply)
@@ -31,19 +35,36 @@ type NodeMap  = IntMap
 type LayerMap = IntMap
 
 data Node n e = Node
-  { nodeLabel :: n
-  -- TODO: Compose?
-  , outgoing  :: Maybe (e -> NodeID)
+  { _nodeLabel :: n
+  , _outgoing  :: Maybe (e -> NodeID)
   } deriving (Eq, Ord, Read, Show)
 
-newtype Layer n e = Layer { nodes :: NodeMap (Node n e) }
+newtype Layer n e = Layer { _nodes :: NodeMap (Node n e) }
   deriving (Eq, Ord, Read, Show, Default)
 
-newtype LDAG n e = LDAG { layers :: LayerMap (Layer n e) }
+newtype LDAG n e = LDAG { _layers :: LayerMap (Layer n e) }
   deriving (Eq, Ord, Read, Show, Default)
 
-getLayer :: MonadState (LDAG n e) m => LayerID -> m (NodeMap (Node n e))
-getLayer layerID = gets (nodes . IM.findWithDefault def layerID . layers)
+makeLenses ''Node
+makeLenses ''Layer
+makeLenses ''LDAG
+
+allLayers :: IndexedTraversal LayerID (LDAG  n e) (LDAG  n' e') (Layer n e) (Layer n' e')
+allNodes  :: IndexedTraversal NodeID  (Layer n e) (Layer n' e') (Node  n e) (Node  n' e')
+allLayers = layers . itraversed
+allNodes  = nodes  . itraversed
+
+type instance Index   (LDAG  n e) = LayerID
+type instance Index   (Layer n e) = NodeID
+type instance IxValue (LDAG  n e) = Layer n e
+type instance IxValue (Layer n e) = Node  n e
+instance Ixed (LDAG  n e) where ix i = layers . ix i
+instance Ixed (Layer n e) where ix i = nodes  . ix i
+instance At   (LDAG  n e) where at i = layers . at i
+instance At   (Layer n e) where at i = nodes  . at i
+
+atLayer :: LayerID -> Lens' (LDAG n e) (Layer n e)
+atLayer id = at id . anon def (null . _nodes)
 
 unfoldLDAGM
   :: (Monad m, Finite e, Ord e)
@@ -51,12 +72,12 @@ unfoldLDAGM
 unfoldLDAGM eq step = flip evalSupplyT universeF . flip execStateT def . go 0 where
   liftedEq a b = lift (lift (eq a b))
   go layerID n = do
-    layer  <- getLayer layerID
-    cached <- firstM (liftedEq n . nodeLabel . snd) (IM.assocs layer)
+    nodeMap <- gets . itoListOf $ atLayer layerID . allNodes
+    cached  <- firstM (liftedEq n . _nodeLabel . snd) nodeMap
     case cached of
       Just (nodeID, _) -> return nodeID
       Nothing -> do
         nodeID   <- supply
-        children <- traverse (\f -> sequenceA $ go (layerID+1) . f) (step n)
-        modify (\(LDAG im) -> LDAG (IM.insert layerID (Layer (IM.insert nodeID (Node n children) layer)) im))
+        children <- traverse (traverse (go (layerID+1))) (step n)
+        atLayer layerID . at nodeID ?= Node n children
         return nodeID
