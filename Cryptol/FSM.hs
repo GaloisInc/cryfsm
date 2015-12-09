@@ -15,7 +15,7 @@ import Cryptol.Parser.Position (emptyRange)
 import Cryptol.Symbolic (ProverCommand(ProverCommand), ProverResult(AllSatResult, ThmResult, ProverError), QueryType(SatQuery), SatNum(SomeSat), pcExpr, pcExtraDecls, pcProverName, pcQueryType, pcSchema, pcSmtFile, pcVerbose)
 import Cryptol.TypeCheck.Solver.InfNat (Nat'(Nat))
 import Cryptol.Utils.Ident (packIdent)
-import Cryptol.ModuleM (ModuleM, checkExpr, getEvalEnv, satProve)
+import Cryptol.ModuleM (ModuleM, checkExpr, getEvalEnv, getPrimMap, satProve)
 import Cryptol.Utils.PP (pretty)
 import Data.List (genericLength)
 import qualified Cryptol.Eval.Value    as E
@@ -57,10 +57,8 @@ getExprBuilderParams = do
     -- TODO: this is a terrible hack; all we really want is a fresh name and
     -- there has to be a better way to get one
     (TC.EAbs x _ _, _) <- checkExpr cryptolId
-    (true         , _) <- checkExpr $ evar "True"
-    (false        , _) <- checkExpr $ evar "False"
-    (cat          , _) <- checkExpr $ evar "#"
-    (neq          , _) <- checkExpr $ evar "!="
+    pm <- getPrimMap
+    let [true, false, cat, neq] = TC.ePrim pm . packIdent <$> ["True", "False", "#", "!="]
     return (ExprBuilderParams x true false cat neq)
 
 cryptolId :: P.Expr P.PName

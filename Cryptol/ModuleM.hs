@@ -8,9 +8,11 @@ module Cryptol.ModuleM
   , loadModuleByPath
   , loadPrelude
   , getEvalEnv
+  , getPrimMap
   ) where
 
 import Cryptol.ModuleSystem (ModuleCmd, initialModuleEnv)
+import Cryptol.ModuleSystem.Base (getPrimMap)
 import Cryptol.ModuleSystem.Monad (ModuleM, ModuleT(ModuleT), getEvalEnv, io)
 import Cryptol.Symbolic (ProverCommand, ProverResult)
 import Cryptol.Utils.Ident (preludeName)
