@@ -9,12 +9,14 @@ module Cryptol.ModuleM
   , loadPrelude
   , getEvalEnv
   , getPrimMap
+  , renameInteractive
   , typeCheckInteractive
   ) where
 
 import Cryptol.ModuleSystem (ModuleCmd, initialModuleEnv)
-import Cryptol.ModuleSystem.Base (TCAction(TCAction, tcAction, tcLinter, tcPrims), exprLinter, getPrimMap, typecheck)
+import Cryptol.ModuleSystem.Base (TCAction(TCAction, tcAction, tcLinter, tcPrims), exprLinter, getPrimMap, rename, typecheck)
 import Cryptol.ModuleSystem.Monad (ImportSource(FromModule), ModuleM, ModuleT(ModuleT), getEvalEnv, io)
+import Cryptol.ModuleSystem.Renamer (RenameM)
 import Cryptol.Symbolic (ProverCommand, ProverResult)
 import Cryptol.TypeCheck (tcExpr)
 import Cryptol.Utils.Ident (preludeName, interactiveName)
@@ -53,6 +55,11 @@ runModuleM act = do
 
 loadPrelude :: ModuleM ()
 loadPrelude = findModule preludeName >>= loadModuleByPath >> return ()
+
+renameInteractive :: RenameM a -> ModuleM a
+renameInteractive act = do
+  (_, namingEnv, _) <- Base.getFocusedEnv
+  rename interactiveName namingEnv act
 
 typeCheckInteractive :: P.Expr TC.Name -> ModuleM (TC.Expr, TC.Schema)
 typeCheckInteractive expr = do

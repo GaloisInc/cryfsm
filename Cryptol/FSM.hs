@@ -1,6 +1,4 @@
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveTraversable #-}
 module Cryptol.FSM
   ( SimpleType(..)
   , fromSimpleType
@@ -14,12 +12,13 @@ module Cryptol.FSM
 import Control.Exception (assert)
 import Cryptol.Eval.Type (evalType)
 import Cryptol.ModuleSystem.Name (lookupPrimDecl)
+import Cryptol.ModuleSystem.Renamer (rename)
 import Cryptol.Parser (ParseError, parseSchema)
 import Cryptol.Parser.Position (emptyRange)
 import Cryptol.Symbolic (ProverCommand(ProverCommand), ProverResult(AllSatResult, ThmResult, ProverError), QueryType(SatQuery), SatNum(SomeSat), pcExpr, pcExtraDecls, pcProverName, pcQueryType, pcSchema, pcSmtFile, pcVerbose)
 import Cryptol.TypeCheck.Solver.InfNat (Nat'(Nat))
 import Cryptol.Utils.Ident (packIdent)
-import Cryptol.ModuleM (ModuleM, checkExpr, getEvalEnv, getPrimMap, satProve, typeCheckInteractive)
+import Cryptol.ModuleM (ModuleM, checkExpr, getEvalEnv, getPrimMap, satProve, renameInteractive, typeCheckInteractive)
 import Cryptol.Utils.PP (pretty)
 import Data.List (genericLength)
 import Data.String (fromString)
@@ -47,32 +46,17 @@ toSimpleType schema = do
       (E.isTFun -> Just (E.isTSeq -> Just (E.numTValue -> Nat n, E.isTBit -> True), out)) -> do
         let simpleTy = SimpleType n out
             prettyTy = pretty (fromSimpleType simpleTy)
-        case tvalueToType out of
-          Right (Right (P.Forall [] [] pty _)) -> simpleTy <$ ensureCmp pty
-          Left parseError -> fail ("Bug: couldn't parse " ++ prettyTy ++ " as a schema")
-          Right (Left n)  -> fail ("Wasn't expecting to see a name in a monomorphic type value, but saw " ++ pretty n)
-          Right (Right s) -> fail ("Bug: monomorphic type " ++ prettyTy ++ " was parsed as polymorphic")
+        schema <- tvalueToSchema out
+        case schema of
+          Right (P.Forall [] [] pty _) -> simpleTy <$ ensureCmp pty
+          Left  parseError -> fail ("Bug: couldn't parse " ++ prettyTy ++ " as a schema")
+          Right s          -> fail ("Bug: monomorphic type " ++ prettyTy ++ " was parsed as polymorphic")
       _ -> fail ("unsupported type " ++ pretty ty)
     _ -> fail "polymorphic types are unsupported"
 
-deriving instance Foldable    P.Located
-deriving instance Foldable    P.Prop
-deriving instance Foldable    P.Schema
-deriving instance Foldable    P.TParam
-deriving instance Foldable    P.Type
-deriving instance Functor     P.Prop
-deriving instance Functor     P.Schema
-deriving instance Functor     P.TParam
-deriving instance Functor     P.Type
-deriving instance Traversable P.Located
-deriving instance Traversable P.Prop
-deriving instance Traversable P.Schema
-deriving instance Traversable P.TParam
-deriving instance Traversable P.Type
-
-tvalueToType :: E.TValue -> Either ParseError (Either P.PName (P.Schema a))
-tvalueToType
-  = fmap (traverse Left)
+tvalueToSchema :: E.TValue -> ModuleM (Either ParseError (P.Schema TC.Name))
+tvalueToSchema
+  = traverse (renameInteractive . rename)
   . parseSchema
   . fromString
   . pretty
