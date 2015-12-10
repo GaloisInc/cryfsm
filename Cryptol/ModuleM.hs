@@ -9,13 +9,15 @@ module Cryptol.ModuleM
   , loadPrelude
   , getEvalEnv
   , getPrimMap
+  , typeCheckInteractive
   ) where
 
 import Cryptol.ModuleSystem (ModuleCmd, initialModuleEnv)
-import Cryptol.ModuleSystem.Base (getPrimMap)
-import Cryptol.ModuleSystem.Monad (ModuleM, ModuleT(ModuleT), getEvalEnv, io)
+import Cryptol.ModuleSystem.Base (TCAction(TCAction, tcAction, tcLinter, tcPrims), exprLinter, getPrimMap, typecheck)
+import Cryptol.ModuleSystem.Monad (ImportSource(FromModule), ModuleM, ModuleT(ModuleT), getEvalEnv, io)
 import Cryptol.Symbolic (ProverCommand, ProverResult)
-import Cryptol.Utils.Ident (preludeName)
+import Cryptol.TypeCheck (tcExpr)
+import Cryptol.Utils.Ident (preludeName, interactiveName)
 import MonadLib (get, inBase, put, raise, set)
 import qualified Cryptol.ModuleSystem       as Cmd
 import qualified Cryptol.ModuleSystem.Monad as Base
@@ -51,3 +53,10 @@ runModuleM act = do
 
 loadPrelude :: ModuleM ()
 loadPrelude = findModule preludeName >>= loadModuleByPath >> return ()
+
+typeCheckInteractive :: P.Expr TC.Name -> ModuleM (TC.Expr, TC.Schema)
+typeCheckInteractive expr = do
+  pm <- getPrimMap
+  (ifaceDecls, _, _) <- Base.getFocusedEnv
+  let act = TCAction { tcAction = tcExpr, tcLinter = exprLinter, tcPrims = pm }
+  Base.loading (FromModule interactiveName) (typecheck act expr ifaceDecls)
