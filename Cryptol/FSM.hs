@@ -21,10 +21,12 @@ import Cryptol.Utils.Ident (packIdent)
 import Cryptol.ModuleM (ModuleM, checkExpr, getEvalEnv, getPrimMap, satProve, renameInteractive, typeCheckInteractive)
 import Cryptol.Utils.PP (pretty)
 import Data.List (genericLength)
+import Data.Map (Map)
 import Data.String (fromString)
 import qualified Cryptol.Eval.Value    as E
 import qualified Cryptol.Parser.AST    as P
 import qualified Cryptol.TypeCheck.AST as TC
+import qualified Data.Map              as M
 
 data SimpleType = SimpleType
   { inputBits  :: Integer
@@ -89,9 +91,12 @@ getExprBuilderParams = do
 cryptolId :: P.Expr P.PName
 cryptolId = P.EFun [P.PVar (P.Located emptyRange (ident "x"))] (P.ETyped (evar "x") P.TBit)
 
-step :: Integer -> [Bool] -> Maybe (Bool -> [Bool])
-step n xs | genericLength xs < n = Just (\x -> xs ++ [x])
-          | otherwise            = Nothing
+step :: Integer -> [Bool] -> ModuleM (Map Bool [Bool])
+step n xs = return $ M.fromList
+  [ (x, xs ++ [x])
+  | genericLength xs < n
+  , x <- [False, True]
+  ]
 
 checkEquality :: ExprBuilderParams -> String -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> ModuleM Bool
 checkEquality params solver unapplied l r = do
