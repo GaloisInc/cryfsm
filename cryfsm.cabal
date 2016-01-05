@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 executable cryfsm
   main-is:             Main.hs
   other-modules:       Convert.LDAG.DOT
+                       Convert.LDAG.JSON
                        Cryptol.FSM
                        Cryptol.ModuleM
                        Data.LDAG

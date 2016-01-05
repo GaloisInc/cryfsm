@@ -20,7 +20,7 @@ import Data.Text.Encoding (encodeUtf8)
 import qualified Options.Applicative as Opt
 import qualified Cryptol.Parser.AST as P
 
-data OutputFormat = DOT deriving (Bounded, Enum, Eq, Ord, Read, Show)
+data OutputFormat = DOT | JSON deriving (Bounded, Enum, Eq, Ord, Read, Show)
 
 -- TODO: put in a more sane order, maybe
 data Options = Options

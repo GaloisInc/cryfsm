@@ -1,5 +1,4 @@
 import Control.Monad.State (evalStateT, lift, unless, when)
-import Convert.LDAG.DOT
 import Cryptol.Eval.Value (isTBit)
 import Cryptol.FSM
 import Cryptol.ModuleM
@@ -9,6 +8,8 @@ import Options
 import System.Exit (ExitCode(ExitFailure), exitWith)
 import System.IO (hPutStrLn, stderr)
 
+import qualified Convert.LDAG.DOT  as DOT
+import qualified Convert.LDAG.JSON as JSON
 import qualified Data.Text.Lazy.IO as T
 
 main = do
@@ -27,7 +28,10 @@ main = do
     ldag     <- unfoldLDAGM (checkEquality params (optSolver opts) function)
                             (step params (optSolver opts) nin valid)
                             []
-    io . howToPrint . convert $ ldag
+    io . howToPrint $ case optOutputFormat opts of
+      -- TODO: use the grouping information to make clusters in DOT.convert
+      DOT  ->  DOT.convert ldag
+      JSON -> JSON.convert ldag grouping
   case res of
     (Left err, _ ) -> hPutStrLn stderr (pretty err) >> exitWith (ExitFailure 1)
     (_       , ws) -> mapM_ (putStrLn . pretty) ws
