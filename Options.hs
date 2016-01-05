@@ -14,9 +14,12 @@ import qualified Cryptol.Parser.AST as P
 
 data OutputFormat = DOT deriving (Bounded, Enum, Eq, Ord, Read, Show)
 
+-- TODO: put in a more sane order, maybe
 data Options = Options
   { optOutputPath   :: Maybe FilePath
-  , optExpr         :: P.Expr P.PName
+  , optFunction     :: P.Expr P.PName
+  , optValid        :: Maybe (P.Expr P.PName)
+  -- TODO: , optGrouping     :: [String]
   , optOutputFormat :: OutputFormat
   , optSolver       :: String
   , optModules      :: [FilePath]
@@ -53,10 +56,15 @@ optionsParser = Options
                    )
   <*> (Opt.option exprParser (  Opt.short 'e'
                              <> Opt.metavar "EXPR"
-                             <> Opt.help "a cryptol expression to partially evaluate (default main)"
+                             <> Opt.help "a cryptol expression to partially evaluate (default `main`)"
                              )
       <|> pure (P.EVar . P.UnQual . packIdent $ "main")
       )
+  <*> Opt.optional (Opt.option exprParser (  Opt.short 'v'
+                                          <> Opt.metavar "EXPR"
+                                          <> Opt.help "a cryptol expression marking inputs as valid (default `\\_ -> True`)"
+                                          )
+                   )
   <*> (Opt.option Opt.auto (  Opt.short 'f'
                            <> Opt.metavar "FORMAT"
                            <> Opt.help (  "output format: "

@@ -3,6 +3,7 @@ module Cryptol.FSM
   ( SimpleType(..)
   , fromSimpleType
   , toSimpleType
+  , checkExprSimpleType
   , ExprBuilderParams
   , getExprBuilderParams
   , step
@@ -23,6 +24,7 @@ import Cryptol.Utils.PP (pretty)
 import Data.List (genericLength)
 import Data.Map (Map)
 import Data.String (fromString)
+import Data.Universe.Instances.Base (universeF)
 import qualified Cryptol.Eval.Value    as E
 import qualified Cryptol.Parser.AST    as P
 import qualified Cryptol.TypeCheck.AST as TC
@@ -55,6 +57,9 @@ toSimpleType schema = do
           Right s          -> fail ("Bug: monomorphic type " ++ prettyTy ++ " was parsed as polymorphic")
       _ -> fail ("unsupported type " ++ pretty ty)
     _ -> fail "polymorphic types are unsupported"
+
+checkExprSimpleType :: P.Expr P.PName -> ModuleM (TC.Expr, SimpleType)
+checkExprSimpleType e = checkExpr e >>= traverse toSimpleType
 
 tvalueToSchema :: E.TValue -> ModuleM (Either ParseError (P.Schema TC.Name))
 tvalueToSchema
@@ -91,16 +96,8 @@ getExprBuilderParams = do
 cryptolId :: P.Expr P.PName
 cryptolId = P.EFun [P.PVar (P.Located emptyRange (ident "x"))] (P.ETyped (evar "x") P.TBit)
 
-step :: Integer -> [Bool] -> ModuleM (Map Bool [Bool])
-step n xs = return $ M.fromList
-  [ (x, xs ++ [x])
-  | genericLength xs < n
-  , x <- [False, True]
-  ]
-
-checkEquality :: ExprBuilderParams -> String -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> ModuleM Bool
-checkEquality params solver unapplied l r = do
-  let (expr, simpleTy) = equalityCondition params unapplied l r
+sat :: String -> (TC.Expr, SimpleType) -> ModuleM Bool
+sat solver (expr, simpleTy) = do
   res <- satProve ProverCommand
     { pcQueryType  = SatQuery (SomeSat 1)
     , pcProverName = solver
@@ -111,13 +108,32 @@ checkEquality params solver unapplied l r = do
     , pcSchema     = fromSimpleType simpleTy
     }
   case res of
-    ThmResult    _ -> return True
-    AllSatResult _ -> return False
+    ThmResult    _ -> return False
+    AllSatResult _ -> return True
     ProverError  e -> fail e
     _              -> fail "SAT solver did something weird"
 
+step :: ExprBuilderParams -> String -> Integer -> Maybe (TC.Expr, SimpleType) -> [Bool] -> ModuleM (Map Bool [Bool])
+step params solver n mValid xs
+  | genericLength xs >= n = return M.empty
+  | otherwise             = M.fromList . concat <$> mapM filterValid universeF
+  where
+  filterValid x = do
+    let xs' = xs ++ [x]
+    couldBeValid <- case mValid of
+      -- when there's no validity condition, everything is valid
+      Nothing    -> return True
+      Just valid -> sat solver (validCondition params valid xs')
+    return [(x, xs') | couldBeValid]
+
+checkEquality :: ExprBuilderParams -> String -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> ModuleM Bool
+checkEquality params solver unapplied l r
+  = fmap not
+  . sat solver
+  $ equalityCondition params unapplied l r
+
 -- (!) assumes `length l == length r`
--- (!) assumes `length l <= n`
+-- (!) assumes `length l <= nin`
 equalityCondition :: ExprBuilderParams -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> (TC.Expr, SimpleType)
 equalityCondition params (unapplied, SimpleType nin out) l r
   = assert (nl == nr && nl <= nin)
@@ -128,22 +144,49 @@ equalityCondition params (unapplied, SimpleType nin out) l r
   nr = genericLength r
   nfresh = nin - nl
 
-  infixl 1 $$, $^
-  ($$) = TC.EApp
-  ($^) = TC.ETApp
-  tvBit          = E.TValue TC.tBit -- TODO: push this upstream
-  liftBool True  = cryptolTrue params
-  liftBool False = cryptolFalse params
-  lift        bs = TC.EList (map liftBool bs) TC.tBit
   partialApp  bs = unapplied $$ (  cryptolCat params
                                 $^ TC.tNum nl
                                 $^ TC.tNum nfresh
                                 $^ TC.tBit
-                                $$ lift bs
+                                $$ liftBools params bs
                                 $$ TC.EVar (freshVar params)
                                 )
   abstraction    = TC.EAbs (freshVar params) (TC.tSeq (TC.tNum nfresh) TC.tBit)
                  $ cryptolNeq params $^ E.tValTy out $$ partialApp l $$ partialApp r
+
+-- (!) assums `length i <= nin`
+validCondition :: ExprBuilderParams -> (TC.Expr, SimpleType) -> [Bool] -> (TC.Expr, SimpleType)
+validCondition params (valid, SimpleType nin out) i
+  = assert (ni <= nin)
+  $ (abstraction, SimpleType nfresh tvBit)
+  where
+  ni, nfresh :: Integer
+  ni     = genericLength i
+  nfresh = nin - ni
+
+  abstraction = TC.EAbs (freshVar params) (TC.tSeq (TC.tNum nfresh) TC.tBit)
+              $ valid $$ (  cryptolCat params
+                         $^ TC.tNum ni
+                         $^ TC.tNum nfresh
+                         $^ TC.tBit
+                         $$ liftBools params i
+                         $$ TC.EVar (freshVar params)
+                         )
+
+infixl 1 $$, $^
+($$) :: TC.Expr -> TC.Expr -> TC.Expr
+($^) :: TC.Expr -> TC.Type -> TC.Expr
+($$) = TC.EApp
+($^) = TC.ETApp
+
+tvBit :: E.TValue
+tvBit = E.TValue TC.tBit -- TODO: push this upstream
+
+liftBool  :: ExprBuilderParams ->  Bool  -> TC.Expr
+liftBools :: ExprBuilderParams -> [Bool] -> TC.Expr
+liftBool  params True  = cryptolTrue params
+liftBool  params False = cryptolFalse params
+liftBools params bs    = TC.EList (liftBool params <$> bs) TC.tBit
 
 ident :: String -> P.PName
 ident = P.UnQual . packIdent
