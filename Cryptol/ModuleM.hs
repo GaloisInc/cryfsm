@@ -4,6 +4,7 @@ module Cryptol.ModuleM
   , io
   , runModuleM
   , checkExpr
+  , evalExpr
   , satProve
   , loadModuleByPath
   , loadPrelude
@@ -14,7 +15,7 @@ module Cryptol.ModuleM
   ) where
 
 import Cryptol.ModuleSystem (ModuleCmd, initialModuleEnv)
-import Cryptol.ModuleSystem.Base (TCAction(TCAction, tcAction, tcLinter, tcPrims), exprLinter, getPrimMap, rename, typecheck)
+import Cryptol.ModuleSystem.Base (TCAction(TCAction, tcAction, tcLinter, tcPrims), evalExpr, exprLinter, getPrimMap, rename, typecheck)
 import Cryptol.ModuleSystem.Monad (ImportSource(FromModule), ModuleM, ModuleT(ModuleT), getEvalEnv, io)
 import Cryptol.ModuleSystem.Renamer (RenameM)
 import Cryptol.Symbolic (ProverCommand, ProverResult)

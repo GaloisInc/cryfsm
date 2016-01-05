@@ -21,6 +21,7 @@ main = do
     mapM_ loadModuleByPath (optModules opts)
     function <-          checkExprSimpleType $ optFunction opts
     valid    <- traverse checkExprSimpleType $ optValid    opts
+    grouping <- optGrouping opts
     unless (maybe True (isTBit . outputType . snd) valid) $
       fail "validity-checking expression must output `Bit`"
     params <- getExprBuilderParams
