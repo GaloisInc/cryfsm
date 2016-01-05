@@ -8,6 +8,7 @@ module Cryptol.FSM
   , getExprBuilderParams
   , step
   , checkEquality
+  , validityAscription
   ) where
 
 import Control.Exception (assert)
@@ -113,17 +114,14 @@ sat solver (expr, simpleTy) = do
     ProverError  e -> fail e
     _              -> fail "SAT solver did something weird"
 
-step :: ExprBuilderParams -> String -> Integer -> Maybe (TC.Expr, SimpleType) -> [Bool] -> ModuleM (Map Bool [Bool])
-step params solver n mValid xs
+step :: ExprBuilderParams -> String -> Integer -> (TC.Expr, SimpleType) -> [Bool] -> ModuleM (Map Bool [Bool])
+step params solver n valid xs
   | genericLength xs >= n = return M.empty
   | otherwise             = M.fromList . concat <$> mapM filterValid universeF
   where
   filterValid x = do
     let xs' = xs ++ [x]
-    couldBeValid <- case mValid of
-      -- when there's no validity condition, everything is valid
-      Nothing    -> return True
-      Just valid -> sat solver (validCondition params valid xs')
+    couldBeValid <- sat solver (validCondition params valid xs')
     return [(x, xs') | couldBeValid]
 
 checkEquality :: ExprBuilderParams -> String -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> ModuleM Bool
@@ -172,6 +170,9 @@ validCondition params (valid, SimpleType nin out) i
                          $$ liftBools params i
                          $$ TC.EVar (freshVar params)
                          )
+
+validityAscription :: Integer -> P.Expr P.PName -> P.Expr P.PName
+validityAscription n e = P.ETyped e (P.TFun (P.TSeq (P.TNum n) P.TBit) P.TBit)
 
 infixl 1 $$, $^
 ($$) :: TC.Expr -> TC.Expr -> TC.Expr

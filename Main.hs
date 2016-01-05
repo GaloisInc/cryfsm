@@ -19,15 +19,14 @@ main = do
   res <- runModuleM $ do
     when (null (optModules opts)) loadPrelude
     mapM_ loadModuleByPath (optModules opts)
-    function <-          checkExprSimpleType $ optFunction opts
-    valid    <- traverse checkExprSimpleType $ optValid    opts
+    function <- checkExprSimpleType $ optFunction opts
+    let nin  =  inputBits (snd function)
+    valid    <- checkExprSimpleType $ validityAscription nin (optValid opts)
     grouping <- optGrouping opts
-    unless (maybe True (isTBit . outputType . snd) valid) $
-      fail "validity-checking expression must output `Bit`"
-    params <- getExprBuilderParams
-    ldag   <- unfoldLDAGM (checkEquality params (optSolver opts) function)
-                          (step params (optSolver opts) (inputBits (snd function)) valid)
-                          []
+    params   <- getExprBuilderParams
+    ldag     <- unfoldLDAGM (checkEquality params (optSolver opts) function)
+                            (step params (optSolver opts) nin valid)
+                            []
     io . howToPrint . convert $ ldag
   case res of
     (Left err, _ ) -> hPutStrLn stderr (pretty err) >> exitWith (ExitFailure 1)

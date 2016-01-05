@@ -26,7 +26,7 @@ data OutputFormat = DOT deriving (Bounded, Enum, Eq, Ord, Read, Show)
 data Options = Options
   { optOutputPath   :: Maybe FilePath
   , optFunction     :: P.Expr P.PName
-  , optValid        :: Maybe (P.Expr P.PName)
+  , optValid        :: P.Expr P.PName
   , optGrouping     :: ModuleM [String]
   , optOutputFormat :: OutputFormat
   , optSolver       :: String
@@ -54,6 +54,11 @@ exprParser = do
   case parseExpr (fromString s) of
     Left err -> Opt.readerError $ "couldn't parse cryptol expression\n" ++ pretty err
     Right v  -> return v
+
+defExpr :: String -> Opt.Parser (P.Expr P.PName)
+defExpr s = case parseExpr (fromString s) of
+  Left err -> error ("internal error: couldn't parse default expression `" ++ s ++ "`:\n" ++ pretty err)
+  Right e  -> pure e
 
 stringListParser :: Opt.ReadM (ModuleM [String])
 stringListParser = do
@@ -92,13 +97,15 @@ optionsParser = Options
                              <> Opt.metavar "EXPR"
                              <> Opt.help "a cryptol expression to partially evaluate (default `main`)"
                              )
-      <|> pure (P.EVar . P.UnQual . packIdent $ "main")
+      <|> defExpr "main"
       )
-  <*> Opt.optional (Opt.option exprParser (  Opt.short 'v'
-                                          <> Opt.metavar "EXPR"
-                                          <> Opt.help "a cryptol expression marking inputs as valid (default `\\_ -> True`)"
-                                          )
-                   )
+  <*> (Opt.option exprParser (  Opt.short 'v'
+                             <> Opt.metavar "EXPR"
+                             <> Opt.help "a cryptol expression marking inputs as valid (default `\\_ -> True`)"
+                             )
+      -- this funny spelling of True does not require the prelude to be in scope
+      <|> defExpr "\\_ -> (x where [x] = 1)"
+      )
   <*> (Opt.option stringListParser (  Opt.short 'g'
                                    <> Opt.metavar "EXPR"
                                    <> Opt.help "a JSON or cryptol expression naming the input positions (default `[\"l\", \"r\"]`)"
