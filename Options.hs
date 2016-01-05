@@ -135,7 +135,7 @@ optionsParser = Options
 optionsInfo :: Opt.ParserInfo Options
 optionsInfo = Opt.info (Opt.helper <*> optionsParser)
   (  Opt.fullDesc
-  <> Opt.progDesc "Produce a finite state machine that emulates EXPR, inspecting one input bit at a time, using SOLVER to check equality of states. The type of EXPR should be monomorphic, and unify with `{a} (Cmp a) => [n] -> a`."
+  <> Opt.progDesc "Produce a finite state machine that emulates EXPR, inspecting one input bit at a time, using SOLVER to check equality of states. The type of the main function EXPR to be translated should be monomorphic, and unify with `{a} (Cmp a) => [n] -> a`."
   )
 
 getOpts :: IO Options
