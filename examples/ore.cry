@@ -1,0 +1,29 @@
+main         = compare  `{base=3, len=5}
+monoValid    = valid    `{base=3, len=5}
+monoGrouping = grouping `{base=3, len=5}
+
+compare : {base, len} (fin base, fin len, base >= 1)
+  => [2 * len * width (base-1)] -> Bit
+compare in = x < y where [x, y] = decode `{base, len} in
+
+grouping : {base, len} (fin base, fin len, base >= 2)
+  => [4 * width (base-1)](String 1)
+grouping = copy "l" # copy "r" # copy "r" # copy "l" where
+  copy v = [v | x <- [1 .. width (base-1)]]
+
+valid : {base, len} (fin base, fin len, base >= 1)
+  => [2 * len * width (base-1)] -> Bit
+valid in = [x <= `(base-1) | xs <- decode `{base, len} in, x <- xs] == ~zero
+
+decode : {base, len} (fin base, fin len, base >= 1)
+  => [2 * len * width (base-1)] -> [2][len][width (base-1)]
+decode bits = transpose (swapEveryOther (split (split bits)))
+
+swapEveryOther : {a,b} [a][2]b -> [a][2]b
+swapEveryOther xs = [f x | f <- cycle [id, swap] | x <- xs]
+  where
+  id   [a, b] = [a, b]
+  swap [a, b] = [b, a]
+
+cycle : {a,b} (fin a) => [a]b -> [inf]b
+cycle xs = xs # cycle xs
