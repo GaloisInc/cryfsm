@@ -17,7 +17,11 @@ cabal-version:       >=1.10
 
 executable cryfsm
   main-is:             Main.hs
-  -- other-modules:       
+  other-modules:       Convert.LDAG.DOT
+                       Cryptol.FSM
+                       Cryptol.ModuleM
+                       Data.LDAG
+                       Options
   other-extensions:    GeneralizedNewtypeDeriving,
                        FlexibleContexts,
                        ViewPatterns
