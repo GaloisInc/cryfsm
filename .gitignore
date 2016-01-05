@@ -1,3 +1,4 @@
 .cabal-sandbox
 *.dot
 *.cry
+*.json
