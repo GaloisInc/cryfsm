@@ -8,6 +8,7 @@ import Data.Aeson.Types (Pair)
 import Data.Function (on)
 import Data.LDAG
 import Data.List (groupBy, nub)
+import Data.Maybe (catMaybes)
 import Data.String (fromString)
 import Data.Text.Lazy (Text)
 import Data.Text.Lazy.Builder (toLazyText)
@@ -36,6 +37,8 @@ ldagGroupingToSteps ldag grouping
 -- (!) assumes each grouping has at least one layer
 findAllPaths ((label, layers):groups@((_, layer':_):_))
   = (label, findPathsTo (nodeIDs layer') layers) : findAllPaths groups
+findAllPaths [(label, layers@(_:_))]
+  = [(label, findPathsTo (nodeIDs (last layers)) (init layers))]
 findAllPaths _ = []
 
 findPathsTo :: Ord e => [NodeID] -> [Layer n e] -> [([e], [[Bool]])]
@@ -46,8 +49,24 @@ findPathsTo endNodeIDs layers =
            | startNode <- nodeIDs (head layers)
            ]
     )
-  | path <- mapM allEdges layers
+  | path <- allPaths layers
   ]
+
+allPaths :: Ord e => [Layer n e] -> [[e]]
+allPaths [] = [[]]
+allPaths layers@(layer:_) = go (layer ^.. allNodes . asIndex) layers where
+  go [] _ = []
+  go activeNodeIDs [] = [[]]
+  go activeNodeIDs (layer:layers) = do
+    edge <- edges
+    path <- go (step edge) layers
+    return (edge:path)
+    where
+    edges = case catMaybes [layer ^. at nodeID | nodeID <- activeNodeIDs] of
+      []    -> [] -- should never happen
+      nodes -> M.keys . foldr1 (M.intersection) . map (^. outgoing) $ nodes
+    step edge = nub . catMaybes
+              $ [transition nodeID [edge] [layer] | nodeID <- activeNodeIDs]
 
 nodeIDs :: Layer n e -> [NodeID]
 nodeIDs layer = layer ^.. allNodes . asIndex
