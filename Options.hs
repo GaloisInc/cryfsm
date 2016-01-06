@@ -20,7 +20,7 @@ import Data.Text.Encoding (encodeUtf8)
 import qualified Options.Applicative as Opt
 import qualified Cryptol.Parser.AST as P
 
-data OutputFormat = DOT | JSON deriving (Bounded, Enum, Eq, Ord, Read, Show)
+data OutputFormat = DOT | JSON | Guess deriving (Bounded, Enum, Eq, Ord, Read, Show)
 
 -- TODO: put in a more sane order, maybe
 data Options = Options
@@ -60,6 +60,19 @@ defExpr s = case parseExpr (fromString s) of
   Left err -> error ("internal error: couldn't parse default expression `" ++ s ++ "`:\n" ++ pretty err)
   Right e  -> pure e
 
+evalStrings :: P.Expr P.PName -> ModuleM [String]
+evalStrings parsed = do
+  (expr, ty) <- checkExpr parsed
+  env        <- getEvalEnv
+  assertStrings env ty
+  map fromStr . fromSeq <$> evalExpr expr
+  where
+  assertStrings env schema = case schema of
+    Forall [] _ ty -> case evalType env ty of
+      (isTSeq -> Just (numTValue -> Nat m, isTSeq -> Just (numTValue -> Nat n, isTSeq -> Just (numTValue -> Nat 8, isTBit -> True))))
+        -> return ()
+      _ -> fail ("expecting list of strings (some concretization of `{m,n} [m][n][8]`), but type was\n" ++ pretty schema)
+
 stringListParser :: Opt.ReadM (ModuleM [String])
 stringListParser = do
   s <- Opt.str
@@ -67,11 +80,7 @@ stringListParser = do
     Right json    -> return (return json)
     Left  jsonErr -> case parseExpr . fromString $ s of
       Left  cryptolErr -> Opt.readerError (errors jsonErr cryptolErr)
-      Right cryptol    -> return $ do
-        (expr, ty) <- checkExpr cryptol
-        env        <- getEvalEnv
-        assertStrings env ty
-        map fromStr . fromSeq <$> evalExpr expr
+      Right cryptol    -> return (evalStrings cryptol)
   where
   errors jsonErr cryptolErr = unlines
     [ "tried parsing grouping as JSON, but failed:\n"
@@ -79,12 +88,6 @@ stringListParser = do
     , "\ntried parsing grouping as cryptol, but failed:\n"
     , pretty cryptolErr
     ]
-
-  assertStrings env schema = case schema of
-    Forall [] _ ty -> case evalType env ty of
-      (isTSeq -> Just (numTValue -> Nat m, isTSeq -> Just (numTValue -> Nat n, isTSeq -> Just (numTValue -> Nat 8, isTBit -> True))))
-        -> return ()
-      _ -> fail ("expecting list of strings (some concretization of `{m,n} [m][n][8]`), but type was\n" ++ pretty schema)
 
 optionsParser :: Opt.Parser Options
 optionsParser = Options
@@ -101,25 +104,24 @@ optionsParser = Options
       )
   <*> (Opt.option exprParser (  Opt.short 'v'
                              <> Opt.metavar "EXPR"
-                             <> Opt.help "a cryptol expression marking inputs as valid (default `\\_ -> True`)"
+                             <> Opt.help "a cryptol expression marking inputs as valid (default `valid`)"
                              )
-      -- this funny spelling of True does not require the prelude to be in scope
-      <|> defExpr "\\_ -> (x where [x] = 1)"
+      <|> defExpr "valid"
       )
   <*> (Opt.option stringListParser (  Opt.short 'g'
                                    <> Opt.metavar "EXPR"
-                                   <> Opt.help "a JSON or cryptol expression naming the input positions (default `[\"l\", \"r\"]`)"
+                                   <> Opt.help "a JSON or cryptol expression naming the input positions (default `grouping`)"
                                    )
-      <|> pure (return ["l", "r"])
+      <|> (evalStrings <$> defExpr "grouping")
       )
   <*> (Opt.option Opt.auto (  Opt.short 'f'
                            <> Opt.metavar "FORMAT"
                            <> Opt.help (  "output format: "
                                        ++ intercalate ", " (map show [minBound .. maxBound :: OutputFormat])
-                                       ++ " (default DOT)"
+                                       ++ " (default Guess)"
                                        )
                            )
-      <|> pure DOT
+      <|> pure Guess
       )
   <*> (Opt.option knownSolverParser (  Opt.short 's'
                                     <> Opt.metavar "SOLVER"

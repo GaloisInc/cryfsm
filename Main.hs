@@ -6,6 +6,7 @@ import Cryptol.Utils.PP (pretty)
 import Data.LDAG
 import Options
 import System.Exit (ExitCode(ExitFailure), exitWith)
+import System.FilePath (takeExtension)
 import System.IO (hPutStrLn, stderr)
 
 import qualified Convert.LDAG.DOT  as DOT
@@ -17,6 +18,12 @@ main = do
   let howToPrint = case optOutputPath opts of
         Just file -> T.writeFile file
         _         -> T.putStrLn
+      outputFormat = case optOutputFormat opts of
+        Guess -> case takeExtension <$> optOutputPath opts of
+          Just ".json" -> JSON
+          _            -> DOT
+        known -> known
+
   res <- runModuleM $ do
     when (null (optModules opts)) loadPrelude
     mapM_ loadModuleByPath (optModules opts)
@@ -29,10 +36,11 @@ main = do
                             (checkDead     params (optSolver opts)          valid)
                             (step nin)
                             []
-    io . howToPrint $ case optOutputFormat opts of
+    io . howToPrint $ case outputFormat of
       -- TODO: use the grouping information to make clusters in DOT.convert
-      DOT  ->  DOT.convert ldag
+      DOT  -> DOT.convert ldag
       JSON -> JSON.convert ldag grouping
+
   case res of
     (Left err, _ ) -> hPutStrLn stderr (pretty err) >> exitWith (ExitFailure 1)
     (_       , ws) -> mapM_ (putStrLn . pretty) ws
