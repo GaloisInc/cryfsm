@@ -8,6 +8,7 @@ module Cryptol.FSM
   , getExprBuilderParams
   , step
   , checkEquality
+  , checkDead
   , validityAscription
   ) where
 
@@ -23,13 +24,10 @@ import Cryptol.Utils.Ident (packIdent)
 import Cryptol.ModuleM (ModuleM, checkExpr, getEvalEnv, getPrimMap, satProve, renameInteractive, typeCheckInteractive)
 import Cryptol.Utils.PP (pretty)
 import Data.List (genericLength)
-import Data.Map (Map)
 import Data.String (fromString)
-import Data.Universe.Instances.Base (universeF)
 import qualified Cryptol.Eval.Value    as E
 import qualified Cryptol.Parser.AST    as P
 import qualified Cryptol.TypeCheck.AST as TC
-import qualified Data.Map              as M
 
 data SimpleType = SimpleType
   { inputBits  :: Integer
@@ -83,6 +81,8 @@ data ExprBuilderParams = ExprBuilderParams
   , cryptolFalse :: TC.Expr
   , cryptolCat   :: TC.Expr
   , cryptolNeq   :: TC.Expr
+  , cryptolAnd   :: TC.Expr
+  , cryptolOr    :: TC.Expr
   }
 
 getExprBuilderParams :: ModuleM ExprBuilderParams
@@ -91,8 +91,8 @@ getExprBuilderParams = do
     -- there has to be a better way to get one
     (TC.EAbs x _ _, _) <- checkExpr cryptolId
     pm <- getPrimMap
-    let [true, false, cat, neq] = TC.ePrim pm . packIdent <$> ["True", "False", "#", "!="]
-    return (ExprBuilderParams x true false cat neq)
+    let [true, false, cat, neq, and, or] = TC.ePrim pm . packIdent <$> ["True", "False", "#", "!=", "&&", "||"]
+    return (ExprBuilderParams x true false cat neq and or)
 
 cryptolId :: P.Expr P.PName
 cryptolId = P.EFun [P.PVar (P.Located emptyRange (ident "x"))] (P.ETyped (evar "x") P.TBit)
@@ -114,26 +114,27 @@ sat solver (expr, simpleTy) = do
     ProverError  e -> fail e
     _              -> fail "SAT solver did something weird"
 
-step :: ExprBuilderParams -> String -> Integer -> (TC.Expr, SimpleType) -> [Bool] -> ModuleM (Map Bool [Bool])
-step params solver n valid xs
-  | genericLength xs >= n = return M.empty
-  | otherwise             = M.fromList . concat <$> mapM filterValid universeF
-  where
-  filterValid x = do
-    let xs' = xs ++ [x]
-    couldBeValid <- sat solver (validCondition params valid xs')
-    return [(x, xs') | couldBeValid]
+step :: Integer -> [Bool] -> Maybe (Bool -> [Bool])
+step n xs | genericLength xs < n = Just (\x -> xs ++ [x])
+          | otherwise            = Nothing
 
-checkEquality :: ExprBuilderParams -> String -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> ModuleM Bool
-checkEquality params solver unapplied l r
+checkEquality :: ExprBuilderParams -> String -> (TC.Expr, SimpleType) -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> ModuleM Bool
+checkEquality params solver unapplied valid l r
   = fmap not
   . sat solver
-  $ equalityCondition params unapplied l r
+  $ equalityCondition params unapplied valid l r
+
+checkDead :: ExprBuilderParams -> String -> (TC.Expr, SimpleType) -> [Bool] -> ModuleM Bool
+checkDead params solver valid bs
+  = fmap not
+  . sat solver
+  $ validCondition params valid bs
 
 -- (!) assumes `length l == length r`
 -- (!) assumes `length l <= nin`
-equalityCondition :: ExprBuilderParams -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> (TC.Expr, SimpleType)
-equalityCondition params (unapplied, SimpleType nin out) l r
+-- (!) assumes the two `SimpleType`s have equal input lengths
+equalityCondition :: ExprBuilderParams -> (TC.Expr, SimpleType) -> (TC.Expr, SimpleType) -> [Bool] -> [Bool] -> (TC.Expr, SimpleType)
+equalityCondition params (unapplied, SimpleType nin out) (valid, _) l r
   = assert (nl == nr && nl <= nin)
   $ (abstraction, SimpleType nfresh tvBit)
   where
@@ -142,15 +143,33 @@ equalityCondition params (unapplied, SimpleType nin out) l r
   nr = genericLength r
   nfresh = nin - nl
 
-  partialApp  bs = unapplied $$ (  cryptolCat params
-                                $^ TC.tNum nl
-                                $^ TC.tNum nfresh
-                                $^ TC.tBit
-                                $$ liftBools params bs
-                                $$ TC.EVar (freshVar params)
-                                )
-  abstraction    = TC.EAbs (freshVar params) (TC.tSeq (TC.tNum nfresh) TC.tBit)
-                 $ cryptolNeq params $^ E.tValTy out $$ partialApp l $$ partialApp r
+  fullList bs      = cryptolCat params
+                   $^ TC.tNum nl
+                   $^ TC.tNum nfresh
+                   $^ TC.tBit
+                   $$ liftBools params bs
+                   $$ TC.EVar (freshVar params)
+  validityMismatch = cryptolNeq params
+                   $^ TC.tBit
+                   $$ (valid $$ fullList l)
+                   $$ (valid $$ fullList r)
+  bothValid        = cryptolAnd params
+                   $^ TC.tBit
+                   $$ (valid $$ fullList l)
+                   $$ (valid $$ fullList r)
+  functionMismatch = cryptolNeq params
+                   $^ E.tValTy out
+                   $$ (unapplied $$ fullList l)
+                   $$ (unapplied $$ fullList r)
+  abstraction = TC.EAbs (freshVar params) (TC.tSeq (TC.tNum nfresh) TC.tBit)
+              $ cryptolOr params
+                $^ TC.tBit
+                $$ validityMismatch
+                $$ (  cryptolAnd params
+                   $^ TC.tBit
+                   $$ bothValid
+                   $$ functionMismatch
+                   )
 
 -- (!) assumes `length i <= nin`
 validCondition :: ExprBuilderParams -> (TC.Expr, SimpleType) -> [Bool] -> (TC.Expr, SimpleType)

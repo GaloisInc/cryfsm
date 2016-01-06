@@ -25,8 +25,9 @@ main = do
     valid    <- checkExprSimpleType $ validityAscription nin (optValid opts)
     grouping <- optGrouping opts
     params   <- getExprBuilderParams
-    ldag     <- unfoldLDAGM (checkEquality params (optSolver opts) function)
-                            (step params (optSolver opts) nin valid)
+    ldag     <- unfoldLDAGM (checkEquality params (optSolver opts) function valid)
+                            (checkDead     params (optSolver opts)          valid)
+                            (step nin)
                             []
     io . howToPrint $ case optOutputFormat opts of
       -- TODO: use the grouping information to make clusters in DOT.convert

@@ -6,7 +6,7 @@
 module Data.LDAG
   ( LDAG, layers, allLayers
   , Layer, nodes, allNodes
-  , Node, nodeLabel, outgoing
+  , Node, nodeLabel, outgoing, dead
   , LayerMap
   , NodeMap
   , LayerID
@@ -20,11 +20,14 @@ import Control.Monad.State (MonadState, StateT, execStateT, get, gets, lift, mod
 import Control.Monad.Supply (evalSupplyT, supply)
 import Data.Default (Default, def)
 import Data.IntMap (IntMap)
-import Data.Map (Map)
-import Data.Universe.Instances.Base (universeF)
+import Data.Universe.Class (Finite, universeF)
+import Data.Universe.Instances.Eq ()
+import Data.Universe.Instances.Ord ()
+import Data.Universe.Instances.Read ()
+import Data.Universe.Instances.Show ()
+import Data.Universe.Instances.Traversable ()
 
 import qualified Data.IntMap as IM
-import qualified Data.Map    as M
 
 type NodeID   = Int
 type LayerID  = Int
@@ -33,7 +36,8 @@ type LayerMap = IntMap
 
 data Node n e = Node
   { _nodeLabel :: n
-  , _outgoing  :: Map e NodeID
+  , _outgoing  :: Maybe (e -> NodeID)
+  , _dead      :: Bool
   } deriving (Eq, Ord, Read, Show)
 
 newtype Layer n e = Layer { _nodes :: NodeMap (Node n e) }
@@ -64,11 +68,10 @@ atLayer :: LayerID -> Lens' (LDAG n e) (Layer n e)
 atLayer id = at id . anon def (null . _nodes)
 
 unfoldLDAGM
-  :: (Monad m, Ord e)
-  => (n -> n -> m Bool) -> (n -> m (Map e n)) -> n -> m (LDAG n e)
-unfoldLDAGM eq step = flip evalSupplyT universeF . flip execStateT def . go 0 where
-  lift2 = lift . lift
-  liftedEq a b = lift2 (eq a b)
+  :: (Monad m, Finite e, Ord e)
+  => (n -> n -> m Bool) -> (n -> m Bool) -> (n -> Maybe (e -> n)) -> n -> m (LDAG n e)
+unfoldLDAGM eq dead step = flip evalSupplyT universeF . flip execStateT def . go 0 where
+  liftedEq a b = lift (lift (eq a b))
   go layerID n = do
     nodeMap <- gets . itoListOf $ atLayer layerID . allNodes
     cached  <- firstM (liftedEq n . _nodeLabel . snd) nodeMap
@@ -76,6 +79,7 @@ unfoldLDAGM eq step = flip evalSupplyT universeF . flip execStateT def . go 0 wh
       Just (nodeID, _) -> return nodeID
       Nothing -> do
         nodeID   <- supply
-        children <- lift2 (step n) >>= traverse (go (layerID+1))
-        atLayer layerID . at nodeID ?= Node n children
+        children <- traverse (traverse (go (layerID+1))) (step n)
+        lively   <- lift (lift (dead n))
+        atLayer layerID . at nodeID ?= Node n children lively
         return nodeID
