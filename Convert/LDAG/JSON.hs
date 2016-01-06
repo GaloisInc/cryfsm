@@ -82,7 +82,7 @@ mappingToPair (label, matrix) = k .= v where
   v = map (map fromEnum) matrix
 
 outputs :: LDAG [Bool] e -> [String]
-outputs ldag = ldag ^.. layers . to IM.findMax . _2 . allNodes . nodeLabel . to showBools
+outputs ldag = ldag ^.. layers . to IM.findMax . _2 . allNodes . filtered (not . (^. dead)) . nodeLabel . to showBools
 
 showBools :: [Bool] -> String
 showBools = concatMap showBool
