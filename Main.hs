@@ -37,8 +37,7 @@ main = do
                             (step nin)
                             []
     io . howToPrint $ case outputFormat of
-      -- TODO: use the grouping information to make clusters in DOT.convert
-      DOT  -> DOT.convert ldag
+      DOT  ->  DOT.convert ldag grouping
       JSON -> JSON.convert ldag grouping
 
   case res of
