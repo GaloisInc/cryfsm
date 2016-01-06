@@ -152,7 +152,7 @@ equalityCondition params (unapplied, SimpleType nin out) l r
   abstraction    = TC.EAbs (freshVar params) (TC.tSeq (TC.tNum nfresh) TC.tBit)
                  $ cryptolNeq params $^ E.tValTy out $$ partialApp l $$ partialApp r
 
--- (!) assums `length i <= nin`
+-- (!) assumes `length i <= nin`
 validCondition :: ExprBuilderParams -> (TC.Expr, SimpleType) -> [Bool] -> (TC.Expr, SimpleType)
 validCondition params (valid, SimpleType nin out) i
   = assert (ni <= nin)
