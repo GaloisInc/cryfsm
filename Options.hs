@@ -22,15 +22,14 @@ import qualified Cryptol.Parser.AST as P
 
 data OutputFormat = DOT | JSON | Guess deriving (Bounded, Enum, Eq, Ord, Read, Show)
 
--- TODO: put in a more sane order, maybe
 data Options = Options
-  { optOutputPath   :: Maybe FilePath
+  { optModules      :: [FilePath]
   , optFunction     :: P.Expr P.PName
   , optValid        :: P.Expr P.PName
   , optGrouping     :: ModuleM [String]
+  , optOutputPath   :: Maybe FilePath
   , optOutputFormat :: OutputFormat
   , optSolver       :: String
-  , optModules      :: [FilePath]
   }
 
 knownSolvers :: [String]
@@ -91,11 +90,7 @@ stringListParser = do
 
 optionsParser :: Opt.Parser Options
 optionsParser = Options
-  <$> Opt.optional (Opt.strOption (  Opt.short 'o'
-                                  <> Opt.metavar "FILE"
-                                  <> Opt.help "output file (default stdin)"
-                                  )
-                   )
+  <$> many (Opt.argument Opt.str (Opt.metavar "FILE ..."))
   <*> (Opt.option exprParser (  Opt.short 'e'
                              <> Opt.metavar "EXPR"
                              <> Opt.help "a cryptol expression to partially evaluate (default `main`)"
@@ -114,6 +109,11 @@ optionsParser = Options
                                    )
       <|> (evalStrings <$> defExpr "grouping")
       )
+  <*> Opt.optional (Opt.strOption (  Opt.short 'o'
+                                  <> Opt.metavar "FILE"
+                                  <> Opt.help "output file (default stdin)"
+                                  )
+                   )
   <*> (Opt.option Opt.auto (  Opt.short 'f'
                            <> Opt.metavar "FORMAT"
                            <> Opt.help (  "output format: "
@@ -132,7 +132,6 @@ optionsParser = Options
                                     )
       <|> pure "any"
       )
-  <*> many (Opt.argument Opt.str (Opt.metavar "FILE ..."))
 
 optionsInfo :: Opt.ParserInfo Options
 optionsInfo = Opt.info (Opt.helper <*> optionsParser)
