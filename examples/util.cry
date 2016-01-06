@@ -1,0 +1,32 @@
+module util where
+
+constantBase : {base, len} (fin base, fin len, base >= 1)
+  => [2][len][width (base-1)] -> Bit
+constantBase in = [x <= `(base-1) | xs <- in, x <- xs] == ~zero
+
+swizzledGrouping : {base} (fin base, base >= 2)
+  => [4 * width (base-1)](String 1)
+swizzledGrouping = copy "l" # copy "r" # copy "r" # copy "l" where
+  copy v = [v | x <- [1 .. width (base-1)]]
+
+interleavedGrouping : {base} (fin base, base >= 2)
+  => [2 * width (base-1)](String 1)
+interleavedGrouping = copy "l" # copy "r" where
+  copy v = [v | x <- [1 .. width (base-1)]]
+
+uninterleave : {base, len} (fin base, fin len, base >= 1)
+  => [2 * len * width (base-1)] -> [2][len][width (base-1)]
+uninterleave bits = transpose (split (split bits))
+
+unswizzle : {base, len} (fin base, fin len, base >= 1)
+  => [2 * len * width (base-1)] -> [2][len][width (base-1)]
+unswizzle bits = transpose (swapEveryOther (split (split bits)))
+
+swapEveryOther : {a,b} [a][2]b -> [a][2]b
+swapEveryOther xs = [f x | f <- cycle [id, swap] | x <- xs]
+  where
+  id   [a, b] = [a, b]
+  swap [a, b] = [b, a]
+
+cycle : {a,b} (fin a) => [a]b -> [inf]b
+cycle xs = xs # cycle xs

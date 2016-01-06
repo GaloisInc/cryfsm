@@ -1,0 +1,12 @@
+import util
+
+main  in = distance (unswizzle `{base=3, len=5} in) < 3
+valid in = constantBase `{base=3} (unswizzle `{base=3, len=5} in)
+grouping = swizzledGrouping `{base=3}
+
+distance : {a,b} (fin a, a >= 1, Cmp b) => [2][a]b -> [width a]
+distance [xs, ys] = popcount [x == y | x <- xs | y <- ys]
+
+popcount : {a} (fin a, a >= 1) => [a] -> [width a]
+popcount xs = sums!0 where
+  sums = [0] # [sum + (0 # [x]) | x <- xs | sum <- sums]
