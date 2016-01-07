@@ -1,14 +1,15 @@
 import util
 
-main  in = distance3 (unswizzle `{base=2, len=5} in) < 2
+main  in = maxDistance (unswizzle `{base=2, len=5, nin=3} in) < 2
 valid in = constantBase `{base=2} (unswizzle `{base=2, len=3} in)
 grouping = swizzledGrouping `{base=2, nin=3}
 
-distance3 : {a,b} (fin a, a >= 1, Cmp b) => [3][a]b -> [width a]
-distance3 [xs, ys, zs] = max xy (max xz yz) where
-  xy = distance xs ys
-  xz = distance xs zs
-  yz = distance ys zs
+maxDistance : {a,b,nin} (fin a, a >= 1, Cmp b, fin nin, nin >= 1) => [nin][a]b -> [width a]
+maxDistance xs = maximum [distance x y | x <- xs , y <- xs]
+
+maximum : {a,b} (fin a, a >= 1, Cmp b) => [a]b -> b
+maximum xs = maxs!0 where
+  maxs = take `{1} xs # [max x y | x <- drop `{1} xs | y <- maxs]
 
 distance : {a,b} (fin a, a >= 1, Cmp b) => [a]b -> [a]b -> [width a]
 distance xs ys = popcount [x != y | x <- xs | y <- ys]
