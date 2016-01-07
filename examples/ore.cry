@@ -2,7 +2,7 @@ import util
 
 main  in = compare (unswizzle `{base=3, len=5} in)
 valid in = constantBase `{base=3} (unswizzle `{base=3, len=5} in)
-grouping = swizzledGrouping `{base=3}
+grouping = swizzledGrouping `{base=3, nin=2}
 
 compare : {a} Cmp a => [2]a -> Bit
 compare [x,y] = x < y
