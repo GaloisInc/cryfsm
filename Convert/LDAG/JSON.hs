@@ -25,7 +25,7 @@ convert ldag grouping
 
 ldagGroupingToValue ldag grouping = object
   [ "steps"   .= stepsToValue (ldagGroupingToSteps ldag grouping)
-  , "outputs" .= outputs ldag
+  , "outputs" .= [outputs ldag]
   ]
 
 ldagGroupingToSteps :: (Eq pos, Finite e, Ord e)
