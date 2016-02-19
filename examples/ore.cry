@@ -1,8 +1,8 @@
 import util
 
-main  in = compare (unswizzle `{base=3, len=5} in)
-valid in = constantBase `{base=3} (unswizzle `{base=3, len=5} in)
-grouping = swizzledGrouping `{base=3, nin=2}
+main  in = compare (unswizzle `{base=4, len=17} in)
+valid in = constantBase `{base=4} (unswizzle `{base=4, len=17} in)
+grouping = swizzledGrouping `{base=4, nin=2}
 
-compare : {a} Cmp a => [2]a -> Bit
-compare [x,y] = x < y
+compare : {a} Cmp a => [2]a -> (Bit, Bit)
+compare [x,y] = (x < y, x == y)
