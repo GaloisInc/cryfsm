@@ -111,7 +111,7 @@ optionsParser = Options
       )
   <*> Opt.optional (Opt.strOption (  Opt.short 'o'
                                   <> Opt.metavar "FILE"
-                                  <> Opt.help "output file (default stdin)"
+                                  <> Opt.help "output file (default stdout)"
                                   )
                    )
   <*> (Opt.option Opt.auto (  Opt.short 'f'
