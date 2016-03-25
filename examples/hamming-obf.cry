@@ -1,0 +1,10 @@
+main in = distance 0b11110000 in < 3
+valid _ = True
+grouping = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+distance : {a,b} (fin a, a >= 1, Cmp b) => [a]b -> [a]b -> [width a]
+distance xs ys = popcount [x != y | x <- xs | y <- ys]
+
+popcount : {a} (fin a, a >= 1) => [a] -> [width a]
+popcount xs = sums!0 where
+  sums = [0] # [sum + (0 # [x]) | x <- xs | sum <- sums]
