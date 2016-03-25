@@ -348,7 +348,7 @@ As always, the `compare` function is unchanged. When we visualize the state
 machine, we will see some states marked with a dotted border to signify that
 they are unreachable by valid inputs:
 
-![A layered finite state machine with invalid states](images/comparison-vanilla.png)
+![A layered finite state machine with invalid states](images/comparison-base3.png)
 
 Paths that involve invalid states are omitted when emitting program templates,
 so the invalid bit sequence "11" does not appear as a key in any of the steps:
