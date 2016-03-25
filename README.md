@@ -418,7 +418,59 @@ location for.
 
 ## DOT
 
+The DOT output produces a relatively standard finite state machine diagram with
+just a few features worth calling out.
+
+All state machines are layered, meaning that each state can be reached only by
+a single, fixed number of symbols from the start state. The consequence of this
+is that most states can be ignored when translating a given layer (collection
+of edges at the same "depth") to matrix form.
+
+Each state is an equivalence class of binary prefixes of a valid input. A
+prefix is considered invalid if all continuations are. Prefixes are considered
+equivalent if for every appropriately sized suffix, either one of two
+conditions holds:
+
+1. Both full strings are invalid, or
+2. Both full strings are valid and the cryptol expression you are converting
+   has the same result for both full strings.
+
+States are labeled by an arbitrary representative of the equivalence class.
+
+The value specified for grouping of input bits is used to group together layers
+in subgraphs. These subgraphs are labeled with the position name from the
+grouping.
+
 ## JSON
+
+The top level object contains two keys, `steps` and `outputs`. To run a program
+represented by this JSON, one would choose a single matrix from each step,
+multiply them together, and use the outputs to connect this result to the
+results of the original expression being converted.
+
+The `steps` field contains a list of steps. Each step is an object with one
+field named `position`, which contains a free-form string determined by the
+grouping expression, and some number of other fields containing a matrix (as a
+list of lists of numbers that are always `0` or `1`). All matrices in a single
+step have the same size, and the sizes are compatible from step-to-step (the
+number of columns in step `i` is the number of rows in step `i+1`). The matrix
+fields have bitstring keys that can be used to select the appropriate matrix
+during evaluation. (Concatenating the keys chosen from each step should give
+the input you want to evaluate the function on.) The matrices in the first step
+will always have exactly one row.
+
+If you choose one matrix from each step and compute their product, you will get
+a matrix with exactly one `1` in it. Without knowing anything more, this would
+not tell you much about the meaning of the evaluation; the `outputs` field
+describes the connection between which entry of the result matrix is `1` and
+what the original function outputs. At a high level, it does this by giving a
+distinguished input to the original function in each position; any input which
+leads to a `1` in that position evaluates to the same thing as the
+distinguished input. In particular, the `outputs` field contains a matrix of
+strings with as many rows as the matrices in the first step and as many columns
+as the matrices in the last step.
+
+[//]: # (TODO: too much English, use formatting to make this more vgrep-able)
 
 # Installation
 
