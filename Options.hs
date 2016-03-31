@@ -26,7 +26,7 @@ data Options = Options
   { optModules      :: [FilePath]
   , optFunction     :: P.Expr P.PName
   , optValid        :: P.Expr P.PName
-  , optGrouping     :: ModuleM [String]
+  , optGrouping     :: Integer -> ModuleM [String]
   , optOutputPath   :: Maybe FilePath
   , optOutputFormat :: OutputFormat
   , optSolver       :: String
@@ -59,8 +59,8 @@ defExpr s = case parseExpr (fromString s) of
   Left err -> error ("internal error: couldn't parse default expression `" ++ s ++ "`:\n" ++ pretty err)
   Right e  -> pure e
 
-evalStrings :: P.Expr P.PName -> ModuleM [String]
-evalStrings parsed = do
+evalStrings :: P.Expr P.PName -> Integer -> ModuleM [String]
+evalStrings parsed nin = do
   (expr, ty) <- checkExpr parsed
   env        <- getEvalEnv
   assertStrings env ty
@@ -69,18 +69,22 @@ evalStrings parsed = do
   assertStrings env schema = case schema of
     Forall [] _ ty -> case evalType env ty of
       (isTSeq -> Just (numTValue -> Nat m, isTSeq -> Just (numTValue -> Nat n, isTSeq -> Just (numTValue -> Nat 8, isTBit -> True))))
-        -> return ()
+        -> if m == nin
+           then return ()
+           else fail ("string list length mismatch\nexpected " ++ show nin ++ " strings, but found " ++ show m)
       _ -> fail ("expecting list of strings (some concretization of `{m,n} [m][n][8]`), but type was\n" ++ pretty schema)
     _ -> fail ("expecting monomorphic type, but found\n" ++ pretty schema)
 
-stringListParser :: Opt.ReadM (ModuleM [String])
+stringListParser :: Opt.ReadM (Integer -> ModuleM [String])
 stringListParser = do
   s <- Opt.str
-  case eitherDecode . fromString $ s of
-    Right json    -> return (return json)
-    Left  jsonErr -> case parseExpr . fromString $ s of
-      Left  cryptolErr -> Opt.readerError (errors jsonErr cryptolErr)
-      Right cryptol    -> return (evalStrings cryptol)
+  case s of
+    "#" -> return (\nin -> return (map show [0..nin-1]))
+    _   -> case eitherDecode . fromString $ s of
+      Right json    -> return (return (return json))
+      Left  jsonErr -> case parseExpr . fromString $ s of
+        Left  cryptolErr -> Opt.readerError (errors jsonErr cryptolErr)
+        Right cryptol    -> return (evalStrings cryptol)
   where
   errors jsonErr cryptolErr = unlines
     [ "tried parsing grouping as JSON, but failed:\n"
@@ -106,7 +110,7 @@ optionsParser = Options
       )
   <*> (Opt.option stringListParser (  Opt.short 'g'
                                    <> Opt.metavar "EXPR"
-                                   <> Opt.help "a JSON or cryptol expression naming the input positions (default `grouping`)"
+                                   <> Opt.help "a JSON or cryptol expression naming the input positions, or '#' for sequential names (default `grouping`)"
                                    )
       <|> (evalStrings <$> defExpr "grouping")
       )

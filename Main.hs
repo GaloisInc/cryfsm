@@ -30,7 +30,7 @@ main = do
     function <- checkExprSimpleType $ optFunction opts
     let nin  =  inputBits (snd function)
     valid    <- checkExprSimpleType $ validityAscription nin (optValid opts)
-    grouping <- optGrouping opts
+    grouping <- optGrouping opts nin
     params   <- getExprBuilderParams
     ldag     <- unfoldLDAGM (checkEquality params (optSolver opts) function valid)
                             (checkDead     params (optSolver opts)          valid)
