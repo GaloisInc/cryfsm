@@ -71,6 +71,7 @@ evalStrings parsed = do
       (isTSeq -> Just (numTValue -> Nat m, isTSeq -> Just (numTValue -> Nat n, isTSeq -> Just (numTValue -> Nat 8, isTBit -> True))))
         -> return ()
       _ -> fail ("expecting list of strings (some concretization of `{m,n} [m][n][8]`), but type was\n" ++ pretty schema)
+    _ -> fail ("expecting monomorphic type, but found\n" ++ pretty schema)
 
 stringListParser :: Opt.ReadM (ModuleM [String])
 stringListParser = do
