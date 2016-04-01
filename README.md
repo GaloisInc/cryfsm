@@ -147,7 +147,7 @@ With a bit of formatting, and some matrices elided for brevity,
          ,"position":"r"
          }
         ]
-    ,"outputs":[["000000","000001","000010"]]
+    ,"outputs":[["\"=\"","\"<\"","\">\""]]
     }
 
 The top-level object has two fields: `steps` gives a way to construct a matrix
@@ -200,10 +200,10 @@ Multiplying these matrices produces the matrix
 which, on its own, doesn't necessarily hold much meaning to us.
 
 The `outputs` field tells us how to interpret this result: it gives us a way to
-tie positions in the result matrix to the original `main` function. Since we
-have a `1` in row 1, column 3 of the result matrix, we look in row 1, column 3
-of the `outputs` matrix to find `"000010"`; since `main 0b000010 = ">"`, this
-means the result matrix `[[0,0,1]]` represents `">"`.
+tie positions in the result matrix to outputs of the original `main` function.
+Since we have a `1` in row 1, column 3 of the result matrix, we look in row 1,
+column 3 of the `outputs` matrix to find `"\">\""`, which means the result
+matrix `[[0,0,1]]` represents the cryptol value `">"`.
 
 ## Optimization: bit swizzling
 
@@ -299,7 +299,7 @@ reduces the multilinearity level needed, this can still be a win.
               ,"position":"r"
               }
              ]
-    ,"outputs":[["000000","000001","000010"]]
+    ,"outputs":[["\"=\"","\"<\"","\">\""]]
     }
 
 ## Base-3 comparisons
@@ -374,7 +374,7 @@ so the invalid bit sequence "11" does not appear as a key in any of the steps:
               ,"position":"r"
               }
              ]
-    ,"outputs":[["00000000","00000001","00000100"]]
+    ,"outputs":[["\"=\"","\"<\"","\">\""]]
     }
 
 # Flag reference
@@ -396,9 +396,12 @@ generated to keep track of whether we must transition to an invalid state.
 Defaults to `valid`.
 
 `-g EXPR`: Specify how input bits should be grouped when producing the program
-template. Can be either a cryptol expression or a JSON object; in either case,
-it should be a list of strings. Any adjacent elements with the same string are
-grouped together. Defaults to `grouping`.
+template. The `EXPR` can be either a cryptol expression or a JSON object; in
+either case, it should be a list of strings. Any adjacent elements with the
+same string are grouped together. To ease usage with obfuscation tasks, you may
+also pass `-g #` to get a grouping which contains string representations of the
+numbers `0` to `n-1`, where `n` is as in the type of the expression given to
+`-e`. Defaults to `grouping`.
 
 `-o FILE`: Choose a file to output to. If not specified, results are printed
 to stdout.
@@ -435,7 +438,9 @@ conditions holds:
 2. Both full strings are valid and the cryptol expression you are converting
    has the same result for both full strings.
 
-States are labeled by an arbitrary representative of the equivalence class.
+States in the last layer are labeled by cryptol values as output by the
+function being compiled. All other states are labeled by an arbitrary
+representative of their equivalence class.
 
 The value specified for grouping of input bits is used to group together layers
 in subgraphs. These subgraphs are labeled with the position name from the
@@ -463,12 +468,9 @@ If you choose one matrix from each step and compute their product, you will get
 a matrix with exactly one `1` in it. Without knowing anything more, this would
 not tell you much about the meaning of the evaluation; the `outputs` field
 describes the connection between which entry of the result matrix is `1` and
-what the original function outputs. At a high level, it does this by giving a
-distinguished input to the original function in each position; any input which
-leads to a `1` in that position evaluates to the same thing as the
-distinguished input. In particular, the `outputs` field contains a matrix of
-strings with as many rows as the matrices in the first step and as many columns
-as the matrices in the last step.
+what the original function outputs. Specifically, if there is a `1` in row `r`
+and column `c` of the result matrix, then the string in row `r` and column `c`
+of `outputs` gives the cryptol value output by the original function.
 
 [//]: # (TODO: too much English, use formatting to make this more vgrep-able)
 
