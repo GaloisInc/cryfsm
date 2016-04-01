@@ -60,7 +60,7 @@ defExpr s = case parseExpr (fromString s) of
   Right e  -> pure e
 
 evalStrings :: P.Expr P.PName -> Integer -> ModuleM [String]
-evalStrings parsed nin = do
+evalStrings parsed _nin = do
   (expr, ty) <- checkExpr parsed
   env        <- getEvalEnv
   assertStrings env ty
@@ -69,9 +69,7 @@ evalStrings parsed nin = do
   assertStrings env schema = case schema of
     Forall [] _ ty -> case evalType env ty of
       (isTSeq -> Just (numTValue -> Nat m, isTSeq -> Just (numTValue -> Nat n, isTSeq -> Just (numTValue -> Nat 8, isTBit -> True))))
-        -> if m == nin
-           then return ()
-           else fail ("string list length mismatch\nexpected " ++ show nin ++ " strings, but found " ++ show m)
+        -> return ()
       _ -> fail ("expecting list of strings (some concretization of `{m,n} [m][n][8]`), but type was\n" ++ pretty schema)
     _ -> fail ("expecting monomorphic type, but found\n" ++ pretty schema)
 
