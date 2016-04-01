@@ -1,3 +1,4 @@
+import Control.Lens (traverseOf)
 import Control.Monad.State (evalStateT, lift, unless, when)
 import Cryptol.Eval.Value (isTBit)
 import Cryptol.FSM
@@ -32,10 +33,12 @@ main = do
     valid    <- checkExprSimpleType $ validityAscription nin (optValid opts)
     grouping <- optGrouping opts nin
     params   <- getExprBuilderParams
-    ldag     <- unfoldLDAGM (checkEquality params (optSolver opts) function valid)
+    ldag_    <- unfoldLDAGM (checkEquality params (optSolver opts) function valid)
                             (checkDead     params (optSolver opts)          valid)
                             (step nin)
                             []
+    ldag     <- traverseOf allLabels (evalSaturated params nin (fst function)) ldag_
+
     io . howToPrint $ case outputFormat of
       DOT  ->  DOT.convert ldag grouping
       JSON -> JSON.convert ldag grouping
@@ -43,3 +46,6 @@ main = do
   case res of
     (Left err, _ ) -> hPutStrLn stderr (pretty err) >> exitWith (ExitFailure 1)
     (_       , ws) -> mapM_ (putStrLn . pretty) ws
+
+  where
+  allLabels = allLayers . allNodes . nodeLabel

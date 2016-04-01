@@ -1,6 +1,7 @@
 module Convert.LDAG.DOT (convert) where
 
 import Control.Lens ((^.), (<.>), (<.), each, itoListOf)
+import Convert.Misc.String (NodeLabel, showBool, showNodeLabel)
 import Data.Graph.Inductive.Graph (Graph, mkGraph)
 import Data.Graph.Inductive.PatriciaTree (Gr)
 import Data.GraphViz (GraphvizParams(clusterBy, clusterID, fmtCluster, fmtNode, fmtEdge, isDotCluster),
@@ -14,7 +15,7 @@ import Data.Universe.Class (Finite, universeF)
 import qualified Data.IntMap as IM
 
 -- | (!) assumes that the nodes at different layers have different IDs
-convert :: LDAG [Bool] Bool -> [String] -> Text
+convert :: LDAG NodeLabel Bool -> [String] -> Text
 convert ldag grouping
   = printDotGraph
   . graphToDot (showParams grouping)
@@ -36,14 +37,14 @@ toFGL ldag = mkGraph ns es where
        , edgeLabel <- universeF
        ]
 
-showParams :: [String] -> GraphvizParams n (LayerID, Bool, [Bool]) Bool (Int, String) (Bool, [Bool])
+showParams :: [String] -> GraphvizParams n (LayerID, Bool, NodeLabel) Bool (Int, String) (Bool, NodeLabel)
 showParams grouping = defaultParams
   { clusterBy    = \(n, (layerID, dead, bs)) -> C (indexOf layerID) (N (n, (dead, bs)))
   , isDotCluster = \_ -> True
   , clusterID    = \(n, _) -> Num (Int n)
   , fmtCluster   = \(_, pos) -> [GraphAttrs [style rounded, toLabel pos]]
   , fmtNode      = \(_, (dead, bs)) -> [style dashed | dead]
-                                    ++ [toLabel . showBools $ bs]
+                                    ++ [toLabel . showNodeLabel $ bs]
   , fmtEdge      = \(_, _, el)      -> [toLabel . showBool  $ el]
   } where
   indexOf layerID = groups !! max 0 (layerID-1)
@@ -52,7 +53,3 @@ showParams grouping = defaultParams
          . group
          . cycle
          $ grouping
-
-showBools = concatMap showBool
-showBool False = "0"
-showBool True  = "1"

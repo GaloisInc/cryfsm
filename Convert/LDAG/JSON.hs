@@ -2,6 +2,7 @@
 module Convert.LDAG.JSON (convert) where
 
 import Control.Lens ((^.), (^..), (<.), _2, asIndex, at, filtered, itraversed, to)
+import Convert.Misc.String (NodeLabel, showBools, showNodeLabel)
 import Data.Aeson (Value, (.=), object, toJSON)
 import Data.Aeson.Encode (encodeToTextBuilder)
 import Data.Aeson.Types (Pair)
@@ -18,7 +19,7 @@ import qualified Data.IntMap as IM
 import qualified Data.Map    as M
 
 -- | (!) assumes there is at least one layer
-convert :: LDAG [Bool] Bool -> [String] -> Text
+convert :: LDAG NodeLabel Bool -> [String] -> Text
 convert ldag grouping
   = toLazyText . encodeToTextBuilder
   $ ldagGroupingToValue ldag grouping
@@ -81,12 +82,5 @@ mappingToPair (label, matrix) = k .= v where
   k = fromString (showBools label)
   v = map (map fromEnum) matrix
 
-outputs :: LDAG [Bool] e -> [String]
-outputs ldag = ldag ^.. layers . to IM.findMax . _2 . allNodes . filtered (not . (^. dead)) . nodeLabel . to showBools
-
-showBools :: [Bool] -> String
-showBools = concatMap showBool
-
-showBool :: Bool -> String
-showBool False = "0"
-showBool True  = "1"
+outputs :: LDAG NodeLabel e -> [String]
+outputs ldag = ldag ^.. layers . to IM.findMax . _2 . allNodes . filtered (not . (^. dead)) . nodeLabel . to showNodeLabel

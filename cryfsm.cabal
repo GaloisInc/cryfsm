@@ -19,6 +19,7 @@ executable cryfsm
   main-is:             Main.hs
   other-modules:       Convert.LDAG.DOT
                        Convert.LDAG.JSON
+                       Convert.Misc.String
                        Cryptol.FSM
                        Cryptol.ModuleM
                        Data.LDAG

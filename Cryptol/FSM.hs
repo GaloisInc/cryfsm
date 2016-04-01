@@ -6,6 +6,7 @@ module Cryptol.FSM
   , checkExprSimpleType
   , ExprBuilderParams
   , getExprBuilderParams
+  , evalSaturated
   , step
   , checkEquality
   , checkDead
@@ -14,6 +15,8 @@ module Cryptol.FSM
 
 import Control.Exception (assert)
 import Cryptol.Eval.Type (evalType)
+import Cryptol.Eval.Value (Value)
+import Cryptol.ModuleM (ModuleM, checkExpr, evalExpr, getEvalEnv, getPrimMap, satProve, renameInteractive, typeCheckInteractive)
 import Cryptol.ModuleSystem.Name (lookupPrimDecl)
 import Cryptol.ModuleSystem.Renamer (rename)
 import Cryptol.Parser (ParseError, parseSchema)
@@ -21,7 +24,6 @@ import Cryptol.Parser.Position (emptyRange)
 import Cryptol.Symbolic (ProverCommand(ProverCommand), ProverResult(AllSatResult, ThmResult, ProverError), QueryType(SatQuery), SatNum(SomeSat), pcExpr, pcExtraDecls, pcProverName, pcQueryType, pcSchema, pcSmtFile, pcVerbose)
 import Cryptol.TypeCheck.Solver.InfNat (Nat'(Nat))
 import Cryptol.Utils.Ident (packIdent)
-import Cryptol.ModuleM (ModuleM, checkExpr, getEvalEnv, getPrimMap, satProve, renameInteractive, typeCheckInteractive)
 import Cryptol.Utils.PP (pretty)
 import Data.List (genericLength)
 import Data.String (fromString)
@@ -96,6 +98,11 @@ getExprBuilderParams = do
 
 cryptolId :: P.Expr P.PName
 cryptolId = P.EFun [P.PVar (P.Located emptyRange (ident "x"))] (P.ETyped (evar "x") P.TBit)
+
+evalSaturated :: ExprBuilderParams -> Integer -> TC.Expr -> [Bool] -> ModuleM (Either [Bool] Value)
+evalSaturated params nin e bs = if genericLength bs == nin
+  then Right <$> evalExpr (TC.EApp e (liftBools params bs))
+  else return (Left bs)
 
 sat :: String -> (TC.Expr, SimpleType) -> ModuleM Bool
 sat solver (expr, simpleTy) = do
