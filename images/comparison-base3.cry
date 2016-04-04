@@ -1,0 +1,10 @@
+compare x y = if x < y
+    then "<"
+    else if x == y
+         then "="
+         else ">"
+main : [8] -> String 1
+main in = compare x y where
+    [x, y] = transpose (split (split `{each=2} in))
+valid in = [x <= 2 | x <- split `{each=2} in] == ~zero
+grouping = ["l", "l", "r", "r"]

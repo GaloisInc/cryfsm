@@ -1,0 +1,10 @@
+compare x y = if x < y
+    then "<"
+    else if x == y
+         then "="
+         else ">"
+main : [6] -> String 1
+main input = compare x y where
+    [x, y] = transpose (split input)
+valid _ = True
+grouping = ["l", "r"]
