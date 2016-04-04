@@ -87,22 +87,8 @@ In cases like this where many bitstring prefixes have been coalesced into a
 single state, `cryfsm` will arbitrarily choose a representative prefix to use
 as the state label.
 
-Of course, in the last layer it is possible to give concrete interpretations of
-the states by simply evaluating `main` on the state labels. First load the
-cryptol interpreter by running `cryptol comparison.cry`. After asking the
-interpreter to print bytestrings as ASCII, we can run `main` a few times:
-
-    Main> :set ascii=on
-    Main> main 0b000001
-    "<"
-    Main> main 0b000000
-    "="
-    Main> main 0b000010
-    ">"
-
-It is planned to do this automatically in a future version of `cryfsm`, so that
-the last layer of the state machine is labeled by the output of `main` rather
-than its input.
+In the last layer, states are labeled instead by simply evaluating `main` on
+one of the chosen representative prefixes (which are now a complete input).
 
 We will come back to the meaning of the rounded rectangles surrounding
 subgraphs.
