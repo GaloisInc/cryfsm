@@ -4,5 +4,5 @@ main  in = compare (unswizzle `{base=4, len=17} in)
 valid in = constantBase `{base=4} (unswizzle `{base=4, len=17} in)
 grouping = swizzledGrouping `{base=4, nin=2}
 
-compare : {a} Cmp a => [2]a -> (Bit, Bit)
-compare [x,y] = (x < y, x == y)
+compare : {a} Cmp a => [2]a -> String 1
+compare [x,y] = if x < y then "<" else if x == y then "=" else ">"
