@@ -1,0 +1,10 @@
+module xor where
+
+import util
+
+main  in = xorZero                (unswizzle `{base=4, nin=3, len=8} in)
+valid in = constantBase `{base=4} (unswizzle `{base=4, nin=3, len=8} in)
+grouping = swizzledGrouping `{base=4, nin=3}
+
+xorZero vs = xors!0 == zero where
+  xors = [zero] # [acc ^ v | acc <- xors | v <- vs]
