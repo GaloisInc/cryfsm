@@ -1,0 +1,8 @@
+import util
+
+main  in = compare (unswizzle `{base=6, len=16} in)
+valid in = constantBase `{base=6} (unswizzle `{base=6, len=16} in)
+grouping = swizzledGrouping `{base=6, nin=2}
+
+compare : {a} Cmp a => [2]a -> String 1
+compare [x,y] = if x < y then "<" else if x == y then "=" else ">"
