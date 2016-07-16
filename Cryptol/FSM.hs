@@ -57,7 +57,7 @@ toSimpleType schema = do
           Left  parseError -> fail ("Bug: couldn't parse " ++ prettyTy ++ " as a schema")
           Right s          -> fail ("Bug: monomorphic type " ++ prettyTy ++ " was parsed as polymorphic")
       _ -> fail ("unsupported type " ++ pretty ty)
-    _ -> fail "polymorphic types are unsupported"
+    _ -> fail ("unsupported polymorphic type " ++ pretty schema)
 
 checkExprSimpleType :: P.Expr P.PName -> ModuleM (TC.Expr, SimpleType)
 checkExprSimpleType e = checkExpr e >>= traverse toSimpleType
