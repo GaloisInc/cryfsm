@@ -5,12 +5,12 @@ import Data.Aeson.Types (typeMismatch)
 import Data.Foldable (fold, traverse_)
 import Data.List (nub)
 import Data.Maybe (fromMaybe)
+import Data.MBP (MBP, Position, Step, Symbol, branches, position, steps)
 import Data.Monoid ((<>))
 import Data.Set (Set)
 import Data.String (fromString)
 import Data.Text (Text, unpack)
 import Data.TotalMap (TMap, fromPartial)
-import Data.Vector (Vector)
 import System.Exit (die)
 import System.IO (hPutStrLn, stderr)
 import qualified Data.ByteString.Lazy as LBS
@@ -18,48 +18,26 @@ import qualified Data.Map             as M
 import qualified Data.HashMap.Strict  as H
 import qualified Data.Set             as S
 import qualified Data.TotalMap        as TM
-import qualified Data.Vector          as V
 import qualified Options.Applicative  as Opt
 
-type Position = Text
-type Symbol   = Text
-
-data Step = Step
-  { position :: Position
-  , symbols  :: Set Symbol
-  } deriving (Eq, Ord, Read, Show)
-
-newtype Machine = Machine (Vector Step)
-newtype Source  = Source (TMap Position (Maybe Integer))
+newtype Source = Source (TMap Position (Maybe Integer))
 
 data Options target = Options
   { source :: Source
   , target :: target
   }
 
-instance FromJSON Step where
-  parseJSON v@(Object o) | H.size o < 2 = typeMismatch "object with a position and at least one other key" v
-  parseJSON (Object o) = Step
-    <$> o .: position
-    <*> (pure . S.fromList . H.keys . H.delete position) o
-    where position = fromString "position"
-  parseJSON v = typeMismatch "object" v
-
-instance FromJSON Machine where
-  parseJSON (Object o) = Machine <$> o .: fromString "steps"
-  parseJSON v = typeMismatch "object" v
-
 instance FromJSON Source where
   parseJSON n@(Number _) = Source . pure . pure <$> parseJSON n
   parseJSON o@(Object _) = Source . fromPartial Nothing . fmap Just <$> parseJSON o
   parseJSON v = typeMismatch "number or map from positions to numbers" v
 
-loadTarget :: Options FilePath -> IO (Options Machine)
+loadTarget :: Options FilePath -> IO (Options MBP)
 loadTarget o = do
   bs <- LBS.readFile (target o)
   case eitherDecode bs of
-    Right machine -> pure (o { target = machine })
-    Left  err     -> die $ "Could not read state machine in " ++ target o ++ ":\n" ++ err
+    Right mbp -> pure (o { target = mbp })
+    Left  err -> die $ "Could not read state machine in " ++ target o ++ ":\n" ++ err
 
 sourceParser :: Opt.ReadM Source
 sourceParser = do
@@ -95,19 +73,19 @@ set :: Ord k => k -> v -> TMap k v -> TMap k v
 set k v tm = fromMaybe <$> tm <*> fromPartial Nothing (M.singleton k (Just v))
 
 step :: Step -> StateT Source (Writer [Position]) Symbol
-step Step { position = pos, symbols = ss } = do
+step s = do
   Source tm <- get
-  case tm TM.! pos of
-    Nothing -> tell [pos] >> return mempty
-    Just n  -> case divMod n (fromIntegral (S.size ss)) of
-      (n', i) -> put (Source (set pos (Just n') tm))
-              >> return (S.elemAt (fromIntegral i) ss)
+  case tm TM.! position s of
+    Nothing -> tell [position s] >> return mempty
+    Just n  -> case divMod n (fromIntegral (M.size (branches s))) of
+      (n', i) -> put (Source (set (position s) (Just n') tm))
+              >> return (fst (M.elemAt (fromIntegral i) (branches s)))
 
-rebase :: Options Machine -> Either [Position] (Set Warning, Vector Symbol)
-rebase Options { source = s@(Source s_), target = Machine m }
-  = case runWriter (runStateT (mapM step (V.reverse m)) s) of
+rebase :: Options MBP -> Either [Position] (Set Warning, [Symbol])
+rebase Options { source = s@(Source s_), target = mbp }
+  = case runWriter (runStateT (mapM step (reverse (steps mbp))) s) of
       (_                   , ps@(_:_)) -> Left  (nub ps)
-      ((result, Source s'_), []      ) -> Right (warning, V.reverse result) where
+      ((result, Source s'_), []      ) -> Right (warning, reverse result) where
         warning
           =    fold (TM.codomain (findWarning <$> s_ <*> s'_))
           S.\\ if S.member Nothing (TM.codomain s_)
