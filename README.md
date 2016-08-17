@@ -462,8 +462,9 @@ of `outputs` gives the cryptol value output by the original function.
 
 # Installation
 
-## SMT Solver
-
-## Cryptol
-
-## `cryfsm`
+Once you have installed cryptol itself, installing `cryfsm` should be as simple
+as typing `cabal install` from within this repository. By default, this places
+executables in `~/.cabal/bin`. See [`cryfsm.cabal`](cryfsm.cabal) for a listing
+of compatible cryptol versions. There are detailed instructions for building
+cryptol from source [in the cryptol
+README](https://github.com/GaloisInc/cryptol/#building-cryptol-from-source).
