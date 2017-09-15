@@ -15,7 +15,7 @@ module Cryptol.FSM
 
 import Control.Exception (assert)
 import Cryptol.Eval.Type (evalType)
-import Cryptol.Eval.Value (Value)
+import Cryptol.Eval.Value (TValue(..), Value)
 import Cryptol.ModuleM (ModuleM, checkExpr, evalExpr, getEvalEnv, getPrimMap, satProve, renameInteractive, typeCheckInteractive)
 import Cryptol.ModuleSystem.Name (lookupPrimDecl)
 import Cryptol.ModuleSystem.Renamer (rename)
@@ -48,7 +48,7 @@ toSimpleType schema = do
   env <- getEvalEnv
   case schema of
     TC.Forall [] _ ty -> case evalType env ty of
-      (E.isTFun -> Just (E.isTSeq -> Just (E.numTValue -> Nat n, E.isTBit -> True), out)) -> do
+      Right (TVFun (TVSeq n TVBit) out) -> do
         let simpleTy = SimpleType n out
             prettyTy = pretty (fromSimpleType simpleTy)
         schema <- tvalueToSchema out
@@ -206,8 +206,8 @@ infixl 1 $$, $^
 ($$) = TC.EApp
 ($^) = TC.ETApp
 
-tvBit :: E.TValue
-tvBit = E.TValue TC.tBit -- TODO: push this upstream
+tvBit :: TValue
+tvBit = TVBit -- TODO: push this upstream
 
 liftBool  :: ExprBuilderParams ->  Bool  -> TC.Expr
 liftBools :: ExprBuilderParams -> [Bool] -> TC.Expr

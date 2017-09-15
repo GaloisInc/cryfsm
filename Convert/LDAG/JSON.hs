@@ -4,7 +4,7 @@ module Convert.LDAG.JSON (convert) where
 import Control.Lens ((^.), (^..), (<.), _2, asIndex, at, filtered, itraversed, to)
 import Convert.Misc.String (NodeLabel, showBools, showNodeLabel)
 import Data.Aeson (Value, (.=), object, toJSON)
-import Data.Aeson.Encode (encodeToTextBuilder)
+import Data.Aeson.Text (encodeToTextBuilder)
 import Data.Aeson.Types (Pair)
 import Data.Function (on)
 import Data.LDAG
