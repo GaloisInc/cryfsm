@@ -4,7 +4,7 @@ module Options (OutputFormat(..), Options(..), getOpts) where
 import Control.Applicative ((<|>), many)
 import Control.Monad (unless)
 import Cryptol.Eval.Type (evalType)
-import Cryptol.Eval.Value (fromStr, fromSeq, isTSeq, isTBit, numTValue)
+import Cryptol.Eval.Value (TValue (..), fromStr, fromSeq, isTSeq, isTBit)
 import Cryptol.ModuleM (ModuleM, checkExpr, evalExpr, getEvalEnv)
 import Cryptol.Parser (parseExpr)
 import Cryptol.Symbolic (proverConfigs)
@@ -67,10 +67,10 @@ evalStrings parsed _nin = do
   map fromStr . fromSeq <$> evalExpr expr
   where
   assertStrings env schema = case schema of
-    Forall [] _ ty -> case evalType env ty of
-      (isTSeq -> Just (numTValue -> Nat m, isTSeq -> Just (numTValue -> Nat n, isTSeq -> Just (numTValue -> Nat 8, isTBit -> True))))
-        -> return ()
-      _ -> fail ("expecting list of strings (some concretization of `{m,n} [m][n][8]`), but type was\n" ++ pretty schema)
+    Forall [] _ ty ->
+      case evalType env ty of
+        Right (TVSeq m (TVSeq n (TVSeq 8 TVBit))) -> return ()
+        _ -> fail ("expecting list of strings (some concretization of `{m,n} [m][n][8]`), but type was\n" ++ pretty schema)
     _ -> fail ("expecting monomorphic type, but found\n" ++ pretty schema)
 
 stringListParser :: Opt.ReadM (Integer -> ModuleM [String])
